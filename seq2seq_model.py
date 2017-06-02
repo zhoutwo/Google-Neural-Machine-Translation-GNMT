@@ -104,11 +104,11 @@ class Seq2SeqModel(object):
     for layer in xrange(num_layers):
       if layer % 2 == 0:
         with tf.device('/gpu:0'):
-          single_cell = tf.nn.rnn_cell.LSTMCell(size/2)
+          single_cell = tf.nn.rnn_cell.LSTMCell(size)
         list_of_cell.append(single_cell)
       else:
         with tf.device('/gpu:1'):
-          single_cell = tf.nn.rnn_cell.LSTMCell(size/2)
+          single_cell = tf.nn.rnn_cell.LSTMCell(size)
         list_of_cell.append(single_cell)
 
     if num_layers > 1:

@@ -1,18 +1,3 @@
-# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-
 """Library for creating sequence-to-sequence models in TensorFlow.
 
 Sequence-to-sequence recurrent neural networks can learn complex functions
@@ -74,6 +59,7 @@ from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import nest
 import Stack_Residual_RNNCell
+
 # TODO(ebrevdo): Remove once _linear is fully deprecated.
 linear = rnn_cell._linear  # pylint: disable=protected-access
 
@@ -809,14 +795,14 @@ def embedding_attention_seq2seq(encoder_inputs,
     dtype = scope.dtype
     # Encoder.
     with tf.device('/gpu:0'):
-        single_cell_1 = rnn_cell.LSTMCell(embedding_size)
+        single_cell_1 = rnn_cell.LSTMCell(embedding_size/2)
     with tf.device('/gpu:1'):
-        single_cell_2 = rnn_cell.LSTMCell(embedding_size)
+        single_cell_2 = rnn_cell.LSTMCell(embedding_size/2)
 
     encoder_fw_cell = rnn_cell.EmbeddingWrapper(single_cell_1, embedding_classes=num_encoder_symbols,
-                                                embedding_size=embedding_size)
+                                                embedding_size=embedding_size/2)
     encoder_bw_cell = rnn_cell.EmbeddingWrapper(single_cell_2, embedding_classes=num_encoder_symbols,
-                                                embedding_size=embedding_size)
+                                                embedding_size=embedding_size/2)
     outputs, _, _ = rnn.bidirectional_rnn(encoder_fw_cell, encoder_bw_cell, encoder_inputs, dtype=dtype)
 
     list_of_cell = []
@@ -893,7 +879,6 @@ def embedding_attention_seq2seq(encoder_inputs,
       state = nest.pack_sequence_as(structure=encoder_state,
                                     flat_sequence=state_list)
     return outputs_and_state[:outputs_len], state
-
 
 
 def sequence_loss_by_example(logits, targets, weights,
