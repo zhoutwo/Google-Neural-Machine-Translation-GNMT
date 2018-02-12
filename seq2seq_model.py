@@ -102,31 +102,8 @@ class Seq2SeqModel(object):
     # Create the internal multi-layer cell for our RNN.
     list_of_cell = []
     for layer in xrange(num_layers):
-      print("1234567890aaaaaaaa", layer, layer % 6)
-      if layer % 6 == 0:
-        with tf.device('/gpu:0'):
-          single_cell = tf.nn.rnn_cell.LSTMCell(size)
-        list_of_cell.append(single_cell)
-      elif layer % 6 == 1:
-        with tf.device('/gpu:1'):
-          single_cell = tf.nn.rnn_cell.LSTMCell(size)
-        list_of_cell.append(single_cell)
-      elif layer % 6 == 2:
-        with tf.device('/gpu:2'):
-            single_cell = tf.nn.rnn_cell.LSTMCell(size)
-        list_of_cell.append(single_cell)
-      elif layer % 6 == 3:
-        with tf.device('/gpu:3'):
-          single_cell = tf.nn.rnn_cell.LSTMCell(size)
-        list_of_cell.append(single_cell)
-      elif layer % 6 == 4:
-        with tf.device('/gpu:4'):
-            single_cell = tf.nn.rnn_cell.LSTMCell(size)
-        list_of_cell.append(single_cell)
-      else:
-        with tf.device('/gpu:5'):
-          single_cell = tf.nn.rnn_cell.LSTMCell(size)
-        list_of_cell.append(single_cell)
+        with tf.device('/gpu:' + str(layer % 4)):
+            list_of_cell.append(tf.nn.rnn_cell.LSTMCell(size))
 
     if num_layers > 1:
       cell = Stack_Residual_RNNCell.Stack_Residual_RNNCell(list_of_cell)

@@ -807,30 +807,8 @@ def embedding_attention_seq2seq(encoder_inputs,
 
     list_of_cell = []
     for layer in xrange(num_layers):
-      if layer % 6 == 0:
-        with tf.device('/gpu:0'):
-          single_cell = tf.nn.rnn_cell.LSTMCell(embedding_size)
-        list_of_cell.append(single_cell)
-      elif layer % 6 == 1:
-        with tf.device('/gpu:1'):
-          single_cell = tf.nn.rnn_cell.LSTMCell(embedding_size)
-        list_of_cell.append(single_cell)
-      elif layer % 6 == 2:
-        with tf.device('/gpu:2'):
-            single_cell = tf.nn.rnn_cell.LSTMCell(embedding_size)
-        list_of_cell.append(single_cell)
-      elif layer % 6 == 3:
-        with tf.device('/gpu:3'):
-          single_cell = tf.nn.rnn_cell.LSTMCell(embedding_size)
-        list_of_cell.append(single_cell)
-      elif layer % 6 == 4:
-        with tf.device('/gpu:4'):
-            single_cell = tf.nn.rnn_cell.LSTMCell(embedding_size)
-        list_of_cell.append(single_cell)
-      else:
-        with tf.device('/gpu:5'):
-          single_cell = tf.nn.rnn_cell.LSTMCell(embedding_size)
-        list_of_cell.append(single_cell)
+        with tf.device('/gpu:' + str(layer % 4)):
+            list_of_cell.append(tf.nn.rnn_cell.LSTMCell(embedding_size))
 
     cell2 = Stack_Residual_RNNCell.Stack_Residual_RNNCell(list_of_cell)
 
