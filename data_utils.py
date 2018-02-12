@@ -40,8 +40,7 @@ EOS_ID = 2
 UNK_ID = 3
 
 # Regular expressions used to tokenize.
-_WORD_SPLIT = re.compile(b"([.,!?\"':;)(])")
-_DIGIT_RE = re.compile(br"\d")
+_WORD_SPLIT = re.compile(b" ")
 
 # URLs for WMT data.
 _WMT_ENFR_TRAIN_URL = "http://www.statmt.org/wmt10/training-giga-fren.tar"
@@ -110,8 +109,7 @@ def basic_tokenizer(sentence):
     return [w for w in words if w]
 
 
-def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
-                      tokenizer=None, normalize_digits=True):
+def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size):
     """Create vocabulary file (if it does not exist yet) from data file.
 
     Data file is assumed to contain one sentence per line. Each sentence is
@@ -137,9 +135,9 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
                 counter += 1
                 if counter % 100000 == 0:
                     print("  processing line %d" % counter)
-                tokens = tokenizer(line) if tokenizer else basic_tokenizer(line)
+                tokens = basic_tokenizer(line)
                 for w in tokens:
-                    word = _DIGIT_RE.sub(b"0", w) if normalize_digits else w
+                    word = _UNK if w is "<unk>" else w
                     if word in vocab:
                         vocab[word] += 1
                     else:
@@ -182,8 +180,7 @@ def initialize_vocabulary(vocabulary_path):
         raise ValueError("Vocabulary file %s not found.", vocabulary_path)
 
 
-def sentence_to_token_ids(sentence, vocabulary,
-                          tokenizer=None, normalize_digits=True):
+def sentence_to_token_ids(sentence, vocabulary):
     """Convert a string to list of integers representing token-ids.
 
     For example, a sentence "I have a dog" may become tokenized into
@@ -200,19 +197,11 @@ def sentence_to_token_ids(sentence, vocabulary,
     Returns:
       a list of integers, the token-ids for the sentence.
     """
-
-    if tokenizer:
-        words = tokenizer(sentence)
-    else:
-        words = basic_tokenizer(sentence)
-    if not normalize_digits:
-        return [vocabulary.get(w, UNK_ID) for w in words]
-    # Normalize digits by 0 before looking words up in the vocabulary.
-    return [vocabulary.get(_DIGIT_RE.sub(b"0", w), UNK_ID) for w in words]
+    words = basic_tokenizer(sentence)
+    return [vocabulary.get(w, UNK_ID) for w in words]
 
 
-def data_to_token_ids(data_path, target_path, vocabulary_path,
-                      tokenizer=None, normalize_digits=True):
+def data_to_token_ids(data_path, target_path, vocabulary_path):
     """Tokenize data file and turn into token-ids using given vocabulary file.
 
     This function loads data line-by-line from data_path, calls the above
@@ -237,12 +226,11 @@ def data_to_token_ids(data_path, target_path, vocabulary_path,
                     counter += 1
                     if counter % 100000 == 0:
                         print("  tokenizing line %d" % counter)
-                    token_ids = sentence_to_token_ids(line, vocab, tokenizer,
-                                                      normalize_digits)
+                    token_ids = sentence_to_token_ids(line, vocab)
                     tokens_file.write(" ".join([str(tok) for tok in token_ids]) + "\n")
 
 
-def prepare_wmt_data(data_dir, en_vocabulary_size, fr_vocabulary_size, tokenizer=None):
+def prepare_wmt_data(data_dir, en_vocabulary_size, fr_vocabulary_size):
     """Get WMT data into data_dir, create vocabularies and tokenize data.
 
     Args:
@@ -268,20 +256,20 @@ def prepare_wmt_data(data_dir, en_vocabulary_size, fr_vocabulary_size, tokenizer
     # Create vocabularies of the appropriate sizes.
     fr_vocab_path = os.path.join(data_dir, "vocab%d.fr" % fr_vocabulary_size)
     en_vocab_path = os.path.join(data_dir, "vocab%d.en" % en_vocabulary_size)
-    create_vocabulary(fr_vocab_path, train_path + ".fr", fr_vocabulary_size, tokenizer)
-    create_vocabulary(en_vocab_path, train_path + ".en", en_vocabulary_size, tokenizer)
+    create_vocabulary(fr_vocab_path, train_path + ".fr", fr_vocabulary_size)
+    create_vocabulary(en_vocab_path, train_path + ".en", en_vocabulary_size)
 
     # Create token ids for the training data.
     fr_train_ids_path = train_path + (".ids%d.fr" % fr_vocabulary_size)
     en_train_ids_path = train_path + (".ids%d.en" % en_vocabulary_size)
-    data_to_token_ids(train_path + ".fr", fr_train_ids_path, fr_vocab_path, tokenizer)
-    data_to_token_ids(train_path + ".en", en_train_ids_path, en_vocab_path, tokenizer)
+    data_to_token_ids(train_path + ".fr", fr_train_ids_path, fr_vocab_path)
+    data_to_token_ids(train_path + ".en", en_train_ids_path, en_vocab_path)
 
     # Create token ids for the development data.
     fr_dev_ids_path = dev_path + (".ids%d.fr" % fr_vocabulary_size)
     en_dev_ids_path = dev_path + (".ids%d.en" % en_vocabulary_size)
-    data_to_token_ids(dev_path + ".fr", fr_dev_ids_path, fr_vocab_path, tokenizer)
-    data_to_token_ids(dev_path + ".en", en_dev_ids_path, en_vocab_path, tokenizer)
+    data_to_token_ids(dev_path + ".fr", fr_dev_ids_path, fr_vocab_path)
+    data_to_token_ids(dev_path + ".en", en_dev_ids_path, en_vocab_path)
 
     return (en_train_ids_path, fr_train_ids_path,
             en_dev_ids_path, fr_dev_ids_path,
