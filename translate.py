@@ -47,6 +47,8 @@ tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
                             "How many training steps to do per checkpoint.")
 tf.app.flags.DEFINE_boolean("decode", False,
                             "Set to True for interactive decoding.")
+tf.app.flags.DEFINE_string("decode_input", None, "Input file to decode.")
+tf.app.flags.DEFINE_string("decode_output", None, "Output file to decode to.")
 tf.app.flags.DEFINE_boolean("self_test", False,
                             "Run a self-test if this is set to True.")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
@@ -213,32 +215,62 @@ def decode():
         en_vocab, _ = data_utils.initialize_vocabulary(en_vocab_path)
         _, rev_fr_vocab = data_utils.initialize_vocabulary(fr_vocab_path)
 
-        # Decode from standard input.
-        sys.stdout.write("> ")
-        sys.stdout.flush()
-        sentence = sys.stdin.readline()
-        while sentence:
-            # Get token-ids for the input sentence.
-            token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), en_vocab)
-            # Which bucket does it belong to?
-            bucket_id = min([b for b in xrange(len(_buckets))
-                             if _buckets[b][0] > len(token_ids)])
-            # Get a 1-element batch to feed the sentence to the model.
-            encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-                {bucket_id: [(token_ids, [])]}, bucket_id)
-            # Get output logits for the sentence.
-            _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                             target_weights, bucket_id, True)
-            # This is a greedy decoder - outputs are just argmaxes of output_logits.
-            outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-            # If there is an EOS symbol in outputs, cut them at that point.
-            if data_utils.EOS_ID in outputs:
-                outputs = outputs[:outputs.index(data_utils.EOS_ID)]
-            # Print out French sentence corresponding to outputs.
-            print(" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs]))
-            print("> ", end="")
+        if FLAGS.decode_input:
+            with open(FLAGS.decode_input, "r") as input_file:
+                with open(FLAGS.decode_output, "w") as output_file:
+                    line = input_file.readline()
+                    if line:
+                        try:
+                            # Get token-ids for the input sentence.
+                            token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(line), en_vocab)
+                            # Which bucket does it belong to?
+                            bucket_id = min([b for b in xrange(len(_buckets))
+                                             if _buckets[b][0] > len(token_ids)])
+                            # Get a 1-element batch to feed the sentence to the model.
+                            encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+                                {bucket_id: [(token_ids, [])]}, bucket_id)
+                            # Get output logits for the sentence.
+                            _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                                             target_weights, bucket_id, True)
+                            # This is a greedy decoder - outputs are just argmaxes of output_logits.
+                            outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+                            # If there is an EOS symbol in outputs, cut them at that point.
+                            if data_utils.EOS_ID in outputs:
+                                outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+                            output_file.write(" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs]))
+                        except Exception as e:
+                            print("Error occurred while decoding", line, ", and the error is:", e.message)
+
+        else:
+            # Decode from standard input.
+            sys.stdout.write("> ")
             sys.stdout.flush()
             sentence = sys.stdin.readline()
+            while sentence:
+                try:
+                    # Get token-ids for the input sentence.
+                    token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), en_vocab)
+                    # Which bucket does it belong to?
+                    bucket_id = min([b for b in xrange(len(_buckets))
+                                     if _buckets[b][0] > len(token_ids)])
+                    # Get a 1-element batch to feed the sentence to the model.
+                    encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+                        {bucket_id: [(token_ids, [])]}, bucket_id)
+                    # Get output logits for the sentence.
+                    _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                                     target_weights, bucket_id, True)
+                    # This is a greedy decoder - outputs are just argmaxes of output_logits.
+                    outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+                    # If there is an EOS symbol in outputs, cut them at that point.
+                    if data_utils.EOS_ID in outputs:
+                        outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+                except Exception as e:
+                    print("Error occurred while decoding", sentence, ", and the error is:", e.message)
+                # Print out French sentence corresponding to outputs.
+                print(" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs]))
+                print("> ", end="")
+                sys.stdout.flush()
+                sentence = sys.stdin.readline()
 
 
 def self_test():
