@@ -217,29 +217,32 @@ def decode():
 
         if FLAGS.decode_input:
             with open(FLAGS.decode_input, "r") as input_file:
-                with open(FLAGS.decode_output, "w") as output_file:
-                    line = input_file.readline()
-                    if line:
-                        try:
-                            # Get token-ids for the input sentence.
-                            token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(line), en_vocab)
-                            # Which bucket does it belong to?
-                            bucket_id = min([b for b in xrange(len(_buckets))
-                                             if _buckets[b][0] > len(token_ids)])
-                            # Get a 1-element batch to feed the sentence to the model.
-                            encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-                                {bucket_id: [(token_ids, [])]}, bucket_id)
-                            # Get output logits for the sentence.
-                            _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                                             target_weights, bucket_id, True)
-                            # This is a greedy decoder - outputs are just argmaxes of output_logits.
-                            outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-                            # If there is an EOS symbol in outputs, cut them at that point.
-                            if data_utils.EOS_ID in outputs:
-                                outputs = outputs[:outputs.index(data_utils.EOS_ID)]
-                            output_file.write(" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs]))
-                        except Exception as e:
-                            print("Error occurred while decoding", line, ", and the error is:", e.message)
+                with open(FLAGS.decode_input + "_actual", "w") as actual_input_file:
+                    with open(FLAGS.decode_output, "w") as output_file:
+                        line = input_file.readline()
+                        while line:
+                            try:
+                                # Get token-ids for the input sentence.
+                                token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(line), en_vocab)
+                                # Which bucket does it belong to?
+                                bucket_id = min([b for b in xrange(len(_buckets))
+                                                 if _buckets[b][0] > len(token_ids)])
+                                # Get a 1-element batch to feed the sentence to the model.
+                                encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+                                    {bucket_id: [(token_ids, [])]}, bucket_id)
+                                # Get output logits for the sentence.
+                                _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                                                 target_weights, bucket_id, True)
+                                # This is a greedy decoder - outputs are just argmaxes of output_logits.
+                                outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+                                # If there is an EOS symbol in outputs, cut them at that point.
+                                if data_utils.EOS_ID in outputs:
+                                    outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+                                output_file.write(" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs]))
+                                actual_input_file.write(line)
+                            except Exception as e:
+                                print("Error occurred while decoding", line, ", and the error was:", e.message)
+                            line = input_file.readline()
 
         else:
             # Decode from standard input.
