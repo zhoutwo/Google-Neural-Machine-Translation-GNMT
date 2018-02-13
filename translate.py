@@ -226,7 +226,7 @@ def decode():
                                 token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(line), en_vocab)
                                 # Which bucket does it belong to?
                                 bucket_id = min([b for b in xrange(len(_buckets))
-                                                 if _buckets[b][0] > len(token_ids)])
+                                                 if _buckets[b][0] >= len(token_ids)])
                                 # Get a 1-element batch to feed the sentence to the model.
                                 encoder_inputs, decoder_inputs, target_weights = model.get_batch(
                                     {bucket_id: [(token_ids, [])]}, bucket_id)
