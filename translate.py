@@ -238,7 +238,7 @@ def decode():
                                 # If there is an EOS symbol in outputs, cut them at that point.
                                 if data_utils.EOS_ID in outputs:
                                     outputs = outputs[:outputs.index(data_utils.EOS_ID)]
-                                output_file.write(" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs]))
+                                output_file.write((" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs])) + "\n")
                                 actual_input_file.write(line)
                             except Exception as e:
                                 print("Error occurred while decoding", line, ", and the error was:", e.message)
