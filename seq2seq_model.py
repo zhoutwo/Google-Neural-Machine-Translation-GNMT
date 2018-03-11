@@ -113,7 +113,7 @@ class Seq2SeqModel(object):
                 with tf.device('/cpu:0'):
                     list_of_cell.append(tf.nn.rnn_cell.LSTMCell(size))
             else:
-                with tf.device('/device:GPU:' + str(layer % num_gpus)):
+                with tf.device('/device:GPU:' + str(layer % (num_gpus - 1))): # Save one GPU for embedding attention
                     list_of_cell.append(tf.nn.rnn_cell.LSTMCell(size))
 
         if num_layers > 1:
@@ -121,18 +121,34 @@ class Seq2SeqModel(object):
 
         # The seq2seq function: we use embedding for the input and attention.
         def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
-            return seq2seq_for_MT.embedding_attention_seq2seq(
-                encoder_inputs,
-                decoder_inputs,
-                cell,
-                num_layers=num_layers,
-                num_gpus=num_gpus,
-                num_encoder_symbols=source_vocab_size,
-                num_decoder_symbols=target_vocab_size,
-                embedding_size=size,
-                output_projection=output_projection,
-                feed_previous=do_decode,
-                dtype=dtype)
+            if not num_gpus:
+                with tf.device('/cpu:0'):
+                    return seq2seq_for_MT.embedding_attention_seq2seq(
+                        encoder_inputs,
+                        decoder_inputs,
+                        cell,
+                        num_layers=num_layers,
+                        num_gpus=num_gpus,
+                        num_encoder_symbols=source_vocab_size,
+                        num_decoder_symbols=target_vocab_size,
+                        embedding_size=size,
+                        output_projection=output_projection,
+                        feed_previous=do_decode,
+                        dtype=dtype)
+            else:
+                with tf.device('/device:GPU:' + str((num_gpus - 1))): # Save one GPU for embedding attention
+                    return seq2seq_for_MT.embedding_attention_seq2seq(
+                        encoder_inputs,
+                        decoder_inputs,
+                        cell,
+                        num_layers=num_layers,
+                        num_gpus=num_gpus,
+                        num_encoder_symbols=source_vocab_size,
+                        num_decoder_symbols=target_vocab_size,
+                        embedding_size=size,
+                        output_projection=output_projection,
+                        feed_previous=do_decode,
+                        dtype=dtype)
 
         # Feeds for inputs.
         self.encoder_inputs = []

@@ -132,7 +132,8 @@ def train():
     en_train, fr_train, en_dev, fr_dev, _, _ = data_utils.prepare_wmt_data(
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.fr_vocab_size)
 
-    config = tf.ConfigProto(log_device_placement=True)
+    config = tf.ConfigProto(log_device_placement=True,
+                            allow_soft_placement=True)
     config.gpu_options.allow_growth = True
 
     with tf.Session(config=config) as sess:
