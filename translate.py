@@ -132,7 +132,10 @@ def train():
     en_train, fr_train, en_dev, fr_dev, _, _ = data_utils.prepare_wmt_data(
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.fr_vocab_size)
 
-    with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
+    config = tf.ConfigProto(log_device_placement=True)
+    config.gpu_options.allow_growth = True
+
+    with tf.Session(config=config) as sess:
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
         model = create_model(sess, False)
