@@ -2,8 +2,6 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import math, numpy as np
-from six.moves import xrange
 import tensorflow as tf
 from tensorflow.python.ops.nn import rnn_cell
 from tensorflow.python.ops import array_ops
@@ -76,5 +74,5 @@ class Stack_Residual_RNNCell(RNNCell):
           cur_inp, new_state = cell(cur_inp, cur_state)
           new_states.append(new_state)
     new_states = (tuple(new_states) if self._state_is_tuple
-                  else array_ops.concat(concat_dim=1, values=new_states))
+                  else array_ops.concat(axis=1, values=new_states))
     return cur_inp, new_states

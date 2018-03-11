@@ -42,9 +42,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-# We disable pylint because we need python3 compatibility.
-from six.moves import xrange  # pylint: disable=redefined-builtin
-from six.moves import zip  # pylint: disable=redefined-builtin
 import tensorflow as tf
 from tensorflow.python import shape
 from tensorflow.python.framework import dtypes
@@ -58,10 +55,12 @@ from tensorflow.python.ops import rnn
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import nest
+from tensorflow.contrib.rnn import *
+from tensorflow.contrib.rnn.python.ops import core_rnn_cell
 import Stack_Residual_RNNCell
 
 # TODO(ebrevdo): Remove once _linear is fully deprecated.
-linear = rnn_cell._linear  # pylint: disable=protected-access
+linear = core_rnn_cell._linear  # pylint: disable=protected-access
 
 
 def _extract_argmax_and_embed(embedding, output_projection=None,
@@ -162,7 +161,7 @@ def basic_rnn_seq2seq(
           It is a 2D Tensor of shape [batch_size x cell.state_size].
     """
     with variable_scope.variable_scope(scope or "basic_rnn_seq2seq"):
-        _, enc_state = rnn.rnn(cell=cell, inputs=encoder_inputs, dtype=dtype)
+        _, enc_state = static_rnn(cell=cell, inputs=encoder_inputs, dtype=dtype)
         return rnn_decoder(decoder_inputs=decoder_inputs, initial_state=enc_state, cell=cell)
 
 
@@ -194,7 +193,7 @@ def tied_rnn_seq2seq(encoder_inputs, decoder_inputs, cell,
     """
     with variable_scope.variable_scope("combined_tied_rnn_seq2seq"):
         scope = scope or "tied_rnn_seq2seq"
-        _, enc_state = rnn.rnn(cell=cell, inputs=encoder_inputs, dtype=dtype, scope=scope)
+        _, enc_state = static_rnn(cell=cell, inputs=encoder_inputs, dtype=dtype, scope=scope)
         variable_scope.get_variable_scope().reuse_variables()
         return rnn_decoder(decoder_inputs=decoder_inputs,
                            initial_state=enc_state,
@@ -328,14 +327,14 @@ def embedding_rnn_seq2seq(encoder_inputs,
             dtype = scope.dtype
 
         # Encoder.
-        encoder_cell = rnn_cell.EmbeddingWrapper(cell=cell,
+        encoder_cell = EmbeddingWrapper(cell=cell,
                                                  embedding_classes=num_encoder_symbols,
                                                  embedding_size=embedding_size)
-        _, encoder_state = rnn.rnn(cell=encoder_cell, inputs=encoder_inputs, dtype=dtype)
+        _, encoder_state = static_rnn(cell=encoder_cell, inputs=encoder_inputs, dtype=dtype)
 
         # Decoder.
         if output_projection is None:
-            cell = rnn_cell.OutputProjectionWrapper(cell=cell, output_size=num_decoder_symbols)
+            cell = OutputProjectionWrapper(cell=cell, output_size=num_decoder_symbols)
 
         if isinstance(feed_previous, bool):
             return embedding_rnn_decoder(
@@ -454,7 +453,7 @@ def embedding_tied_rnn_seq2seq(encoder_inputs,
         if num_decoder_symbols is not None:
             output_symbols = num_decoder_symbols
         if output_projection is None:
-            cell = rnn_cell.OutputProjectionWrapper(cell=cell, output_size=output_symbols)
+            cell = OutputProjectionWrapper(cell=cell, output_size=output_symbols)
 
         if isinstance(feed_previous, bool):
             loop_function = _extract_argmax_and_embed(embedding=embedding,
@@ -587,7 +586,7 @@ def attention_decoder(decoder_inputs,
         hidden_features = []
         v = []
         attention_vec_size = attn_size  # Size of query vectors for attention.
-        for a in xrange(num_heads):
+        for a in range(num_heads):
             k = variable_scope.get_variable("AttnW_%d" % a,
                                             [1, 1, attn_size, attention_vec_size])
             hidden_features.append(nn_ops.conv2d(input=hidden, filter=k, strides=[1, 1, 1, 1], padding="SAME"))
@@ -605,8 +604,8 @@ def attention_decoder(decoder_inputs,
                     ndims = q.get_shape().ndims
                     if ndims:
                         assert ndims == 2
-                query = array_ops.concat(concat_dim=1, values=query_list)
-            for a in xrange(num_heads):
+                query = array_ops.concat(axis=1, values=query_list)
+            for a in range(num_heads):
                 with variable_scope.variable_scope("Attention_%d" % a):
                     y = linear(args=query, output_size=attention_vec_size, bias=True)
                     y = array_ops.reshape(tensor=y, shape=[-1, 1, 1, attention_vec_size])
@@ -622,8 +621,8 @@ def attention_decoder(decoder_inputs,
 
         outputs = []
         prev = None
-        batch_attn_size = array_ops.pack(values=[batch_size, attn_size])
-        attns = [array_ops.zeros(shape=batch_attn_size, dtype=dtype) for _ in xrange(num_heads)]
+        batch_attn_size = array_ops.stack(values=[batch_size, attn_size])
+        attns = [array_ops.zeros(shape=batch_attn_size, dtype=dtype) for _ in range(num_heads)]
         for a in attns:  # Ensure the second shape of attention vectors is set.
             a.set_shape([None, attn_size])
         if initial_state_attention:
@@ -803,35 +802,35 @@ def embedding_attention_seq2seq(encoder_inputs,
         dtype = scope.dtype
         # Encoder.
         with tf.device('/gpu:0'):
-            single_cell_1 = rnn_cell.LSTMCell(embedding_size / 2)
+            single_cell_1 = LSTMCell(embedding_size / 2)
         with tf.device('/gpu:1'):
-            single_cell_2 = rnn_cell.LSTMCell(embedding_size / 2)
+            single_cell_2 = LSTMCell(embedding_size / 2)
 
-        encoder_fw_cell = rnn_cell.EmbeddingWrapper(single_cell_1, embedding_classes=num_encoder_symbols,
+        encoder_fw_cell = EmbeddingWrapper(single_cell_1, embedding_classes=num_encoder_symbols,
                                                     embedding_size=embedding_size / 2)
-        encoder_bw_cell = rnn_cell.EmbeddingWrapper(single_cell_2, embedding_classes=num_encoder_symbols,
+        encoder_bw_cell = EmbeddingWrapper(single_cell_2, embedding_classes=num_encoder_symbols,
                                                     embedding_size=embedding_size / 2)
-        outputs, _, _ = rnn.bidirectional_rnn(encoder_fw_cell, encoder_bw_cell, encoder_inputs, dtype=dtype)
+        outputs, _, _ = static_bidirectional_rnn(encoder_fw_cell, encoder_bw_cell, encoder_inputs, dtype=dtype)
 
         list_of_cell = []
-        for layer in xrange(num_layers):
+        for layer in range(num_layers):
             with tf.device('/gpu:' + str(layer % 4)):
                 list_of_cell.append(tf.nn.rnn_cell.LSTMCell(embedding_size))
 
         cell2 = Stack_Residual_RNNCell.Stack_Residual_RNNCell(list_of_cell)
 
-        encoder_outputs, encoder_state = rnn.rnn(
+        encoder_outputs, encoder_state = static_rnn(
             cell=cell2, inputs=outputs, dtype=dtype)
 
         # First calculate a concatenation of encoder outputs to put attention on.
         top_states = [array_ops.reshape(tensor=e, shape=[-1, 1, cell.output_size])
                       for e in encoder_outputs]
-        attention_states = array_ops.concat(concat_dim=1, values=top_states)
+        attention_states = array_ops.concat(axis=1, values=top_states)
 
         # Decoder.
         output_size = None
         if output_projection is None:
-            cell = rnn_cell.OutputProjectionWrapper(cell=cell, output_size=num_decoder_symbols)
+            cell = OutputProjectionWrapper(cell=cell, output_size=num_decoder_symbols)
             output_size = num_decoder_symbols
 
         if isinstance(feed_previous, bool):
