@@ -246,7 +246,7 @@ def decode():
                                 output_file.write((" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs])) + "\n")
                                 actual_input_file.write(line)
                             except Exception as e:
-                                print("Error occurred while decoding", line, ", and the error was:", e.message)
+                                print("Error occurred while decoding", line, ", and the error was:", str(e))
                             line = input_file.readline()
 
         else:
