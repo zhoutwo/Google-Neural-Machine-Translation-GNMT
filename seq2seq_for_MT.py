@@ -259,9 +259,8 @@ def embedding_rnn_decoder(decoder_inputs,
             proj_biases = ops.convert_to_tensor(value=output_projection[1], dtype=dtype)
             proj_biases.get_shape().assert_is_compatible_with([num_symbols])
 
-        with tf.device('/cpu:0'):
-            embedding = variable_scope.get_variable(name="embedding",
-                                                    shape=[num_symbols, embedding_size])
+        embedding = variable_scope.get_variable(name="embedding",
+                                                shape=[num_symbols, embedding_size])
         loop_function = _extract_argmax_and_embed(embedding=embedding,
                                                   output_projection=output_projection,
                                                   update_embedding=update_embedding_for_previous) if feed_previous else None
@@ -441,9 +440,9 @@ def embedding_tied_rnn_seq2seq(encoder_inputs,
             proj_weights.get_shape().assert_is_compatible_with(other=[None, num_symbols])
             proj_biases = ops.convert_to_tensor(value=output_projection[1], dtype=dtype)
             proj_biases.get_shape().assert_is_compatible_with(other=[num_symbols])
-        with tf.device('/cpu:0'):
-            embedding = variable_scope.get_variable(
-                "embedding", [num_symbols, embedding_size], dtype=dtype)
+
+        embedding = variable_scope.get_variable(
+            "embedding", [num_symbols, embedding_size], dtype=dtype)
 
         emb_encoder_inputs = [embedding_ops.embedding_lookup(params=embedding, ids=x)
                               for x in encoder_inputs]
@@ -726,9 +725,8 @@ def embedding_attention_decoder(decoder_inputs,
     with variable_scope.variable_scope(
         scope or "embedding_attention_decoder", dtype=dtype) as scope:
 
-        with tf.device('/cpu:0'):
-            embedding = variable_scope.get_variable("embedding",
-                                                    [num_symbols, embedding_size])
+        embedding = variable_scope.get_variable("embedding",
+                                                [num_symbols, embedding_size])
         loop_function = _extract_argmax_and_embed(embedding=embedding,
                                                   output_projection=output_projection,
                                                   update_embedding=update_embedding_for_previous) if feed_previous else None
