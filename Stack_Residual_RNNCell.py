@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import math, numpy as np
-from six.moves import xrange 
+from six.moves import xrange
 import tensorflow as tf
 from tensorflow.python.ops.nn import rnn_cell
 from tensorflow.python.ops import array_ops
@@ -35,7 +35,7 @@ class Stack_Residual_RNNCell(RNNCell):
     self._state_is_tuple = state_is_tuple
     self._use_residual_connections = use_residual_connections
     if not state_is_tuple:
-      if any(nest.is_sequence(c.state_size) for c in self._cells):
+      if any(nest.is_sequence(seq=c.state_size) for c in self._cells):
         raise ValueError("Some cells return tuples of states, but the flag "
                          "state_is_tuple is not set.  State sizes are: %s"
                          % str([c.state_size for c in self._cells]))
@@ -57,19 +57,18 @@ class Stack_Residual_RNNCell(RNNCell):
       cur_state_pos = 0
       cur_inp = inputs
       if self._use_residual_connections:
-        past_inp = tf.zeros_like(cur_inp)
+        past_inp = tf.zeros_like(tensor=cur_inp)
       new_states = []
       for i, cell in enumerate(self._cells):
         with vs.variable_scope("Cell%d" % i):
           if self._state_is_tuple:
-            if not nest.is_sequence(state):
+            if not nest.is_sequence(seq=state):
               raise ValueError(
                   "Expected state to be a tuple of length %d, but received: %s"
                   % (len(self.state_size), state))
             cur_state = state[i]
           else:
-            cur_state = array_ops.slice(
-                state, [0, cur_state_pos], [-1, cell.state_size])
+            cur_state = array_ops.slice(input_=state, begin=[0, cur_state_pos], size=[-1, cell.state_size])
             cur_state_pos += cell.state_size
           if self._use_residual_connections:
             cur_inp += past_inp
@@ -77,5 +76,5 @@ class Stack_Residual_RNNCell(RNNCell):
           cur_inp, new_state = cell(cur_inp, cur_state)
           new_states.append(new_state)
     new_states = (tuple(new_states) if self._state_is_tuple
-                  else array_ops.concat(1, new_states))
+                  else array_ops.concat(concat_dim=1, values=new_states))
     return cur_inp, new_states

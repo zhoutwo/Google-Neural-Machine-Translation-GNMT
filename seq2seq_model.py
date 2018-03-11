@@ -95,8 +95,12 @@ class Seq2SeqModel(object):
                 local_b = tf.cast(b, tf.float32)
                 local_inputs = tf.cast(inputs, tf.float32)
                 return tf.cast(
-                    tf.nn.sampled_softmax_loss(local_w_t, local_b, local_inputs, labels,
-                                               num_samples, self.target_vocab_size),
+                    tf.nn.sampled_softmax_loss(weights=local_w_t,
+                                               biases=local_b,
+                                               inputs=local_inputs,
+                                               labels=labels,
+                                               num_sampled=num_samples,
+                                               num_classes=self.target_vocab_size),
                     dtype)
 
             softmax_loss_function = sampled_loss
@@ -143,37 +147,43 @@ class Seq2SeqModel(object):
 
         # Training outputs and losses.
         if forward_only:
-            self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets(
-                self.encoder_inputs, self.decoder_inputs, targets,
-                self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True),
-                softmax_loss_function=softmax_loss_function)
+            self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets(encoder_inputs=self.encoder_inputs,
+                                                                         decoder_inputs=self.decoder_inputs,
+                                                                         targets=targets,
+                                                                         weights=self.target_weights,
+                                                                         buckets=buckets,
+                                                                         seq2seq=lambda x, y: seq2seq_f(x, y, True),
+                                                                         softmax_loss_function=softmax_loss_function)
             # If we use output projection, we need to project outputs for decoding.
             if output_projection is not None:
                 for b in xrange(len(buckets)):
                     self.outputs[b] = [
-                        tf.matmul(output, output_projection[0]) + output_projection[1]
+                        tf.matmul(a=output,
+                                  b=output_projection[0]) + output_projection[1]
                         for output in self.outputs[b]
                     ]
         else:
-            self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets(
-                self.encoder_inputs, self.decoder_inputs, targets,
-                self.target_weights, buckets,
-                lambda x, y: seq2seq_f(x, y, False),
-                softmax_loss_function=softmax_loss_function)
+            self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets(encoder_inputs=self.encoder_inputs,
+                                                                         decoder_inputs=self.decoder_inputs,
+                                                                         targets=targets,
+                                                                         weights=self.target_weights,
+                                                                         buckets=buckets,
+                                                                         seq2seq=lambda x, y: seq2seq_f(x, y, False),
+                                                                         softmax_loss_function=softmax_loss_function)
 
         # Gradients and SGD update operation for training the model.
         params = tf.trainable_variables()
         if not forward_only:
             self.gradient_norms = []
             self.updates = []
-            opt = tf.train.GradientDescentOptimizer(self.learning_rate)
+            opt = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate)
             for b in xrange(len(buckets)):
-                gradients = tf.gradients(self.losses[b], params)
-                clipped_gradients, norm = tf.clip_by_global_norm(gradients,
-                                                                 max_gradient_norm)
+                gradients = tf.gradients(ys=self.losses[b], xs=params)
+                clipped_gradients, norm = tf.clip_by_global_norm(t_list=gradients,
+                                                                 clip_norm=max_gradient_norm)
                 self.gradient_norms.append(norm)
-                self.updates.append(opt.apply_gradients(
-                    zip(clipped_gradients, params), global_step=self.global_step))
+                self.updates.append(opt.apply_gradients(grads_and_vars=zip(clipped_gradients, params),
+                                                        global_step=self.global_step))
 
         self.saver = tf.train.Saver(tf.all_variables(), max_to_keep=None)
 
