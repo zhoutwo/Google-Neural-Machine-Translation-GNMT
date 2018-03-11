@@ -29,9 +29,9 @@ from tensorflow.python.platform import gfile
 
 # Special vocabulary symbols - we always put them at the start.
 _PAD = b"_PAD"
-_GO = b"_GO"
-_EOS = b"_EOS"
-_UNK = b"_UNK"
+_GO = b"<s>"
+_EOS = b"</s>"
+_UNK = b"<unk>"
 _START_VOCAB = [_PAD, _GO, _EOS, _UNK]
 
 PAD_ID = 0
@@ -137,7 +137,7 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size):
                     print("  processing line %d" % counter)
                 tokens = basic_tokenizer(line)
                 for w in tokens:
-                    word = _UNK if w is "<unk>" else w
+                    word = w
                     if word in vocab:
                         vocab[word] += 1
                     else:
