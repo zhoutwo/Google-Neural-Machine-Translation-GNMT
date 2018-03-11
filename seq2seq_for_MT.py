@@ -751,6 +751,7 @@ def embedding_attention_seq2seq(encoder_inputs,
                                 embedding_size,
                                 num_heads=1,
                                 num_layers=3,
+                                num_gpus=0,
                                 output_projection=None,
                                 feed_previous=False,
                                 dtype=None,
@@ -814,8 +815,12 @@ def embedding_attention_seq2seq(encoder_inputs,
 
         list_of_cell = []
         for layer in range(num_layers):
-            with tf.device('/gpu:' + str(layer % 4)):
-                list_of_cell.append(tf.nn.rnn_cell.LSTMCell(embedding_size))
+            if not num_gpus:
+                with tf.device('/cpu:0'):
+                    list_of_cell.append(tf.nn.rnn_cell.LSTMCell(embedding_size))
+            else:
+                with tf.device('/gpu:' + str(layer % num_gpus)):
+                    list_of_cell.append(tf.nn.rnn_cell.LSTMCell(embedding_size))
 
         cell2 = Stack_Residual_RNNCell.Stack_Residual_RNNCell(list_of_cell)
 

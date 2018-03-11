@@ -35,6 +35,7 @@ class Seq2SeqModel(object):
                  buckets,
                  size,
                  num_layers,
+                 num_gpus,
                  max_gradient_norm,
                  batch_size,
                  learning_rate,
@@ -108,8 +109,12 @@ class Seq2SeqModel(object):
         # Create the internal multi-layer cell for our RNN.
         list_of_cell = []
         for layer in range(num_layers):
-            with tf.device('/gpu:' + str(layer % 4)):
-                list_of_cell.append(tf.nn.rnn_cell.LSTMCell(size))
+            if not num_gpus:
+                with tf.device('/cpu:0'):
+                    list_of_cell.append(tf.nn.rnn_cell.LSTMCell(size))
+            else:
+                with tf.device('/gpu:' + str(layer % num_gpus)):
+                    list_of_cell.append(tf.nn.rnn_cell.LSTMCell(size))
 
         if num_layers > 1:
             cell = Stack_Residual_RNNCell.Stack_Residual_RNNCell(list_of_cell)
@@ -121,6 +126,7 @@ class Seq2SeqModel(object):
                 decoder_inputs,
                 cell,
                 num_layers=num_layers,
+                num_gpus=num_gpus,
                 num_encoder_symbols=source_vocab_size,
                 num_decoder_symbols=target_vocab_size,
                 embedding_size=size,

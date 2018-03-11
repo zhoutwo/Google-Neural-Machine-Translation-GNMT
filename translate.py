@@ -36,6 +36,7 @@ tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 4, "Number of layers in the model.")
+tf.app.flags.DEFINE_integer("num_gpus", 0, "Number of GPUs available.")
 tf.app.flags.DEFINE_integer("en_vocab_size", 40000, "English vocabulary size.")
 tf.app.flags.DEFINE_integer("fr_vocab_size", 40000, "French vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", "/tmp", "Data directory")
@@ -107,6 +108,7 @@ def create_model(session, forward_only):
         _buckets,
         FLAGS.size,
         FLAGS.num_layers,
+        FLAGS.num_gpus,
         FLAGS.max_gradient_norm,
         FLAGS.batch_size,
         FLAGS.learning_rate,
@@ -280,7 +282,7 @@ def self_test():
     with tf.Session() as sess:
         print("Self-test for neural translation model.")
         # Create model with vocabularies of 10, 2 small buckets, 2 layers of 32.
-        model = seq2seq_model.Seq2SeqModel(10, 10, [(3, 3), (6, 6)], 32, 2,
+        model = seq2seq_model.Seq2SeqModel(10, 10, [(3, 3), (6, 6)], 32, 2, 0,
                                            5.0, 32, 0.3, 0.99, num_samples=8)
         sess.run(tf.initialize_all_variables())
 
