@@ -113,7 +113,7 @@ class Seq2SeqModel(object):
                 with tf.device('/cpu:0'):
                     list_of_cell.append(tf.nn.rnn_cell.LSTMCell(size))
             else:
-                with tf.device('/gpu:' + str(layer % num_gpus)):
+                with tf.device('/device:GPU:' + str(layer % num_gpus)):
                     list_of_cell.append(tf.nn.rnn_cell.LSTMCell(size))
 
         if num_layers > 1:
