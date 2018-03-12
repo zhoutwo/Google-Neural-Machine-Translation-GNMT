@@ -26,6 +26,7 @@ import numpy as np
 import tensorflow as tf
 import seq2seq_model
 import data_utils
+import discriminator
 
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99,
@@ -58,7 +59,7 @@ FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(5, 10), (10, 15), (20, 25), (40, 50)]
+_buckets = [(40, 10), (60, 30), (100, 50), (140, 60), (180, 80), (220, 90), (260, 100)]
 
 
 def read_data(source_path, target_path, max_size=None):
@@ -140,6 +141,12 @@ def train():
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
         model = create_model(sess, False)
+        dis_model = discriminator.create_model(max_encoder_seq_length=260,
+                                               num_layers=FLAGS.num_layers,
+                                               num_gpus=FLAGS.num_gpus,
+                                               num_dict_size=FLAGS.en_vocab_size,
+                                               latent_dim=FLAGS.size,
+                                               checkpoint_folder=FLAGS.train_dir)
 
         # Read data into buckets and compute their sizes.
         print("Reading development and training data (limit: %d)."
@@ -168,10 +175,12 @@ def train():
 
             # Get a batch and make a step.
             start_time = time.time()
-            encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-                train_set, bucket_id)
-            _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
-                                         target_weights, bucket_id, False)
+            encoder_inputs,\
+            decoder_inputs,\
+            target_weights,\
+            original_encoder_inputs,\
+            original_decoder_inputs = model.get_batch(train_set, bucket_id)
+            _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
             step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
             loss += step_loss / FLAGS.steps_per_checkpoint
             current_step += 1
@@ -196,8 +205,11 @@ def train():
                     if len(dev_set[bucket_id]) == 0:
                         print("  eval: empty bucket %d" % (bucket_id))
                         continue
-                    encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-                        dev_set, bucket_id)
+                    encoder_inputs, \
+                    decoder_inputs, \
+                    target_weights, \
+                    original_encoder_inputs, \
+                    original_decoder_inputs = model.get_batch(dev_set, bucket_id)
                     _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
                                                  target_weights, bucket_id, True)
                     eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float(
@@ -233,8 +245,11 @@ def decode():
                                 bucket_id = min([b for b in range(len(_buckets))
                                                  if _buckets[b][0] >= len(token_ids)])
                                 # Get a 1-element batch to feed the sentence to the model.
-                                encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-                                    {bucket_id: [(token_ids, [])]}, bucket_id)
+                                encoder_inputs, \
+                                decoder_inputs, \
+                                target_weights, \
+                                original_encoder_inputs, \
+                                original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
                                 # Get output logits for the sentence.
                                 _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
                                                                  target_weights, bucket_id, True)
@@ -262,8 +277,11 @@ def decode():
                     bucket_id = min([b for b in range(len(_buckets))
                                      if _buckets[b][0] > len(token_ids)])
                     # Get a 1-element batch to feed the sentence to the model.
-                    encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-                        {bucket_id: [(token_ids, [])]}, bucket_id)
+                    encoder_inputs, \
+                    decoder_inputs, \
+                    target_weights, \
+                    original_encoder_inputs, \
+                    original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
                     # Get output logits for the sentence.
                     _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
                                                      target_weights, bucket_id, True)
@@ -295,8 +313,11 @@ def self_test():
                     [([1, 1, 1, 1, 1], [2, 2, 2, 2, 2]), ([3, 3, 3], [5, 6])])
         for _ in range(5):  # Train the fake model for 5 steps.
             bucket_id = random.choice([0, 1])
-            encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-                data_set, bucket_id)
+            encoder_inputs, \
+            decoder_inputs, \
+            target_weights, \
+            original_encoder_inputs, \
+            original_decoder_inputs = model.get_batch(data_set, bucket_id)
             model.step(sess, encoder_inputs, decoder_inputs, target_weights,
                        bucket_id, False)
 

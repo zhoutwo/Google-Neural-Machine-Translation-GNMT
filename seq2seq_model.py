@@ -253,7 +253,7 @@ class Seq2SeqModel(object):
         else:
             return None, outputs[0], outputs[1:]  # No gradient norm, loss, outputs.
 
-    def get_batch(self, data, bucket_id):
+    def get_batch(self, data, bucket_id, no_random=False):
         """Get a random batch of data from the specified bucket, prepare for step.
 
         To feed data in step(..) it must be a list of batch-major vectors, while
@@ -274,17 +274,18 @@ class Seq2SeqModel(object):
 
         # Get a random batch of encoder and decoder inputs from data,
         # pad them if needed, reverse encoder inputs and add GO to decoder.
-        for _ in range(self.batch_size):
-            encoder_input, decoder_input = random.choice(data[bucket_id])
+        for i in range(self.batch_size):
+            encoder_input, decoder_input = data[bucket_id][i] if no_random else random.choice(data[bucket_id])
 
             # Encoder inputs are padded and then reversed.
-            encoder_pad = [data_utils.PAD_ID] * (encoder_size - len(encoder_input))
+            encoder_pad_size = (encoder_size - len(encoder_input))
+            encoder_pad = [data_utils.PAD_ID] * encoder_pad_size
             encoder_inputs.append(list(reversed(encoder_input + encoder_pad)))
 
             # Decoder inputs get an extra "GO" symbol, and are padded then.
             decoder_pad_size = decoder_size - len(decoder_input) - 1
-            decoder_inputs.append([data_utils.GO_ID] + decoder_input +
-                                  [data_utils.PAD_ID] * decoder_pad_size)
+            decoder_pad = [data_utils.PAD_ID] * decoder_pad_size
+            decoder_inputs.append([data_utils.GO_ID] + decoder_input + decoder_pad)
 
         # Now we create batch-major vectors from the data selected above.
         batch_encoder_inputs, batch_decoder_inputs, batch_weights = [], [], []
@@ -311,4 +312,4 @@ class Seq2SeqModel(object):
                 if length_idx == decoder_size - 1 or target == data_utils.PAD_ID:
                     batch_weight[batch_idx] = 0.0
             batch_weights.append(batch_weight)
-        return batch_encoder_inputs, batch_decoder_inputs, batch_weights
+        return batch_encoder_inputs, batch_decoder_inputs, batch_weights, encoder_inputs, decoder_inputs
