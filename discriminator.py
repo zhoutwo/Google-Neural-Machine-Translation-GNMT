@@ -22,6 +22,7 @@ def create_model(max_encoder_seq_length=200, num_layers=1, num_gpus=0, num_dict_
                 step_num = _get_step_num(f)
                 if step_num > max:
                     max = step_num
+            print("Reading discriminator model from saved model:", checkpoint_folder + str(max) + '.h5')
             return load_model(checkpoint_folder + str(max) + '.h5')
 
     inputs = Input(shape=(max_encoder_seq_length,))
