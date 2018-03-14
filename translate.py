@@ -60,7 +60,7 @@ FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(40, 10), (60, 30), (100, 50), (140, 60), (180, 80), (220, 90), (260, 100)]
+_buckets = [(260, 100)]
 
 
 def read_data(source_path, target_path, max_size=None):
@@ -227,7 +227,7 @@ def train():
             original_decoder_inputs = train_model.get_batch(train_set, bucket_id)
             _, step_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
             global_step = train_model.global_step.eval(session=train_sess)
-        writer.add_summary(tf.summary.scalar(name="generator_normal_loss", tensor=step_loss), global_step=global_step)
+        writer.add_summary(tf.summary.scalar(name="generator_normal_loss", tensor=step_loss), global_step=global_step).eval()
         with g_eval.as_default():
             original_encoder_inputs_in_original_order = [(list(reversed(oe)), []) for oe in original_encoder_inputs]
             eval_encoder_inputs, eval_decoder_inputs, eval_target_weights, _, _ = eval_model.get_batch(
@@ -269,7 +269,7 @@ def train():
         dis_loss = dis_model.train_on_batch(disc_in, disc_out)
         print("Discriminator loss:", dis_loss)
         writer.add_summary(tf.summary.scalar(name="discriminator_truth_loss", tensor=dis_loss),
-                           global_step=global_step)
+                           global_step=global_step).eval()
 
         print("Training discriminator with composed data")
         eval_output_tokens = [_pad_decode_in(_get_outputs(ls), 100) for ls in eval_output_logits_transposed]
@@ -292,7 +292,7 @@ def train():
         composed_dis_loss = dis_model.train_on_batch(composed_disc_in, composed_disc_out)
         print("Discriminator loss:", composed_dis_loss)
         writer.add_summary(tf.summary.scalar(name="discriminator_composed_loss", tensor=composed_dis_loss),
-                           global_step=global_step+1)
+                           global_step=global_step+1).eval()
 
         print("Training generator with composed false data")
         with g_train.as_default():
@@ -316,7 +316,7 @@ def train():
             print("New step loss:", new_step_loss)
             global_step = train_model.global_step.eval(session=train_sess)
         writer.add_summary(tf.summary.scalar(name="generator_composed_loss", tensor=new_step_loss),
-                           global_step=global_step)
+                           global_step=global_step).eval()
 
         step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
         loss += (step_loss + dis_loss) / FLAGS.steps_per_checkpoint
@@ -330,11 +330,11 @@ def train():
                   "%.2f" % (global_step, train_model.learning_rate.eval(),
                             step_time, perplexity))
             writer.add_summary(tf.summary.scalar(name="learn_rate", tensor=train_model.learning_rate.eval()),
-                               global_step=global_step)
+                               global_step=global_step).eval()
             writer.add_summary(tf.summary.scalar(name="train_step_time", tensor=step_time),
-                               global_step=global_step)
+                               global_step=global_step).eval()
             writer.add_summary(tf.summary.scalar(name="train_perplex", tensor=perplexity),
-                               global_step=global_step)
+                               global_step=global_step).eval()
             # Decrease learning rate if no improvement was seen over last 3 times.
             if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
                 train_sess.run(train_model.learning_rate_decay_op)
@@ -361,7 +361,7 @@ def train():
                 eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float("inf")
                 print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
                 writer.add_summary(tf.summary.scalar(name="eval_perplex_bucket_"+str(bucket_id), tensor=eval_ppx),
-                                   global_step=train_model.global_step)
+                                   global_step=train_model.global_step).eval()
             sys.stdout.flush()
 
 
