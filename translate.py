@@ -169,7 +169,7 @@ def train():
     print("Creating discriminator model")
     dis_model = discriminator.create_model(max_encoder_seq_length=260,
                                            num_layers=FLAGS.num_layers,
-                                           num_gpus=FLAGS.num_gpus-1,
+                                           num_gpus=0,
                                            num_dict_size=FLAGS.en_vocab_size,
                                            latent_dim=FLAGS.size,
                                            checkpoint_folder=FLAGS.train_dir)
@@ -372,7 +372,7 @@ def decode():
         model = create_or_load_model(sess, model)
         dis_model = discriminator.create_model(max_encoder_seq_length=260,
                                                num_layers=FLAGS.num_layers,
-                                               num_gpus=FLAGS.num_gpus-1,
+                                               num_gpus=0,
                                                num_dict_size=FLAGS.en_vocab_size,
                                                latent_dim=FLAGS.size,
                                                checkpoint_folder=FLAGS.train_dir)
