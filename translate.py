@@ -42,6 +42,7 @@ tf.app.flags.DEFINE_integer("en_vocab_size", 40000, "English vocabulary size.")
 tf.app.flags.DEFINE_integer("fr_vocab_size", 40000, "French vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", "/tmp", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "/tmp", "Training directory.")
+tf.app.flags.DEFINE_string("log_dir", "/tmp", "TensorBoard log directory.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 0,
                             "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
@@ -172,13 +173,14 @@ def train():
                                            num_dict_size=FLAGS.en_vocab_size,
                                            latent_dim=FLAGS.size,
                                            checkpoint_folder=FLAGS.train_dir)
-
+    writer = None
     with g_train.as_default():
         print("Creating model in the training session")
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
         train_model = create_model(train_sess, False)
         train_model = create_or_load_model(train_sess, train_model, initial_save=True)
+        writer = tf.summary.FileWriter(logdir=FLAGS.log_dir, graph=g_train)
 
     with g_eval.as_default():
         print("Creating model in the eval session")
@@ -223,7 +225,7 @@ def train():
             original_encoder_inputs, \
             original_decoder_inputs = train_model.get_batch(train_set, bucket_id)
             _, step_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
-
+        writer.add_summary(tf.Summary.Value(tag="generator_normal_loss", simple_value=step_loss), global_step=train_model.global_step.eval())
         with g_eval.as_default():
             original_encoder_inputs_in_original_order = [(list(reversed(oe)), []) for oe in original_encoder_inputs]
             eval_encoder_inputs, eval_decoder_inputs, eval_target_weights, _, _ = eval_model.get_batch(
@@ -264,6 +266,8 @@ def train():
         disc_out = np.ones(shape=(train_model.batch_size, 1))
         dis_loss = dis_model.train_on_batch(disc_in, disc_out)
         print("Discriminator loss:", dis_loss)
+        writer.add_summary(tf.Summary.Value(tag="discriminator_truth_loss", simple_value=dis_loss),
+                           global_step=train_model.global_step.eval())
 
         print("Training discriminator with composed data")
         eval_output_tokens = [_pad_decode_in(_get_outputs(ls), 100) for ls in eval_output_logits_transposed]
@@ -285,6 +289,8 @@ def train():
         composed_disc_out = np.zeros((len(composed_disc_in_enc),))
         composed_dis_loss = dis_model.train_on_batch(composed_disc_in, composed_disc_out)
         print("Discriminator loss:", composed_dis_loss)
+        writer.add_summary(tf.Summary.Value(tag="discriminator_composed_loss", simple_value=composed_dis_loss),
+                           global_step=train_model.global_step.eval()+1)
 
         print("Training generator with composed false data")
         with g_train.as_default():
@@ -306,6 +312,8 @@ def train():
             _, new_step_loss, _ = train_model.step(train_sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id_to_use,
                                                False)
             print("New step loss:", new_step_loss)
+        writer.add_summary(tf.Summary.Value(tag="generator_composed_loss", simple_value=new_step_loss),
+                           global_step=train_model.global_step.eval())
 
         step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
         loss += (step_loss + dis_loss) / FLAGS.steps_per_checkpoint
@@ -318,6 +326,12 @@ def train():
             print("global generator step %d learning rate %.4f step-time %.2f perplexity "
                   "%.2f" % (train_model.global_step.eval(), train_model.learning_rate.eval(),
                             step_time, perplexity))
+            writer.add_summary(tf.Summary.Value(tag="learn_rate", simple_value=train_model.learning_rate.eval()),
+                               global_step=train_model.global_step.eval())
+            writer.add_summary(tf.Summary.Value(tag="train_step_time", simple_value=step_time),
+                               global_step=train_model.global_step.eval())
+            writer.add_summary(tf.Summary.Value(tag="train_perplex", simple_value=perplexity),
+                               global_step=train_model.global_step.eval())
             # Decrease learning rate if no improvement was seen over last 3 times.
             if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
                 train_sess.run(train_model.learning_rate_decay_op)
@@ -342,6 +356,8 @@ def train():
                                              target_weights, bucket_id, True)
                 eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float("inf")
                 print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
+                writer.add_summary(tf.Summary.Value(tag="eval_perplex", simple_value=eval_ppx),
+                                   global_step=train_model.global_step.eval())
             sys.stdout.flush()
 
 
