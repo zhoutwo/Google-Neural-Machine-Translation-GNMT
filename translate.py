@@ -226,7 +226,7 @@ def train():
             original_encoder_inputs, \
             original_decoder_inputs = train_model.get_batch(train_set, bucket_id)
             _, step_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
-            global_step = train_model.global_step.eval()
+            global_step = train_model.global_step.eval(session=train_sess)
         writer.add_summary(tf.Summary.Value(tag="generator_normal_loss", simple_value=step_loss), global_step=global_step)
         with g_eval.as_default():
             original_encoder_inputs_in_original_order = [(list(reversed(oe)), []) for oe in original_encoder_inputs]
@@ -314,7 +314,7 @@ def train():
             _, new_step_loss, _ = train_model.step(train_sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id_to_use,
                                                False)
             print("New step loss:", new_step_loss)
-            global_step = train_model.global_step.eval()
+            global_step = train_model.global_step.eval(session=train_sess)
         writer.add_summary(tf.Summary.Value(tag="generator_composed_loss", simple_value=new_step_loss),
                            global_step=global_step)
 
