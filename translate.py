@@ -101,7 +101,7 @@ def read_data(source_path, target_path, max_size=None):
     return data_set
 
 
-def create_model(session, forward_only):
+def create_model(session, forward_only, allow_gpu=True):
     """Create translation model and initialize or load parameters in session."""
     dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
     model = seq2seq_model.Seq2SeqModel(
@@ -110,7 +110,7 @@ def create_model(session, forward_only):
         _buckets,
         FLAGS.size,
         FLAGS.num_layers,
-        FLAGS.num_gpus,
+        FLAGS.num_gpus if allow_gpu else 0,
         FLAGS.max_gradient_norm,
         FLAGS.batch_size,
         FLAGS.learning_rate,
@@ -187,7 +187,7 @@ def train():
         print("Creating model in the eval session")
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
-        eval_model = create_model(eval_sess, True)
+        eval_model = create_model(eval_sess, True, allow_gpu=False)
         eval_model = create_or_load_model(eval_sess, eval_model)
 
     # Read data into buckets and compute their sizes.
