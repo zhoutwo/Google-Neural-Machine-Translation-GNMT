@@ -37,7 +37,7 @@ def create_model(max_encoder_seq_length=200, num_layers=1, num_gpus=0, num_dict_
             discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1))(discriminator)
     else:
         for i in range(num_layers - 1):
-            with tf.device('/device:GPU:' + str((i+1) % num_gpus) + 1):
+            with tf.device('/device:GPU:' + str((i+1) % num_gpus)):
                 discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(i), return_sequences=True)(discriminator)
         with tf.device('/device:GPU:' + str(num_layers % num_gpus)):
             discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1))(discriminator)
