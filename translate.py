@@ -157,7 +157,7 @@ def train():
     en_train, fr_train, en_dev, fr_dev, _, _ = data_utils.prepare_wmt_data(
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.fr_vocab_size)
 
-    config = tf.ConfigProto(log_device_placement=True,
+    config = tf.ConfigProto(log_device_placement=False,
                             allow_soft_placement=True)
     config.gpu_options.allow_growth = True
 
@@ -167,28 +167,31 @@ def train():
     eval_sess = tf.Session(config=config, graph=g_eval)
 
     print("Creating discriminator model")
-    dis_model = discriminator.create_model(max_encoder_seq_length=260,
-                                           num_layers=FLAGS.num_layers,
-                                           num_gpus=0,
-                                           num_dict_size=FLAGS.en_vocab_size,
-                                           latent_dim=FLAGS.size,
-                                           checkpoint_folder=FLAGS.train_dir)
+    with tf.device("/cpu:0"):
+        dis_model = discriminator.create_model(max_encoder_seq_length=260,
+                                               num_layers=FLAGS.num_layers,
+                                               num_gpus=FLAGS.num_gpus,
+                                               num_dict_size=FLAGS.en_vocab_size,
+                                               latent_dim=FLAGS.size,
+                                               checkpoint_folder=FLAGS.train_dir)
     writer = None
     global_step = 0
     with g_train.as_default():
         print("Creating model in the training session")
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
-        train_model = create_model(train_sess, False)
-        train_model = create_or_load_model(train_sess, train_model, initial_save=True)
+        with tf.device("/cpu:0"):
+            train_model = create_model(train_sess, False)
+            train_model = create_or_load_model(train_sess, train_model, initial_save=True)
         writer = tf.summary.FileWriter(logdir=FLAGS.log_dir, graph=g_train)
 
     with g_eval.as_default():
         print("Creating model in the eval session")
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
-        eval_model = create_model(eval_sess, True, allow_gpu=False)
-        eval_model = create_or_load_model(eval_sess, eval_model)
+        with tf.device("/cpu:0"):
+            eval_model = create_model(eval_sess, True)
+            eval_model = create_or_load_model(eval_sess, eval_model)
 
     # Read data into buckets and compute their sizes.
     print("Reading development and training data (limit: %d)."
@@ -344,7 +347,8 @@ def train():
                 save_checkpoint(train_sess, train_model)
             dis_model.save(os.path.join(FLAGS.train_dir, '/', str(train_model.global_step), '.h5'))
             # Update eval_model with new weights
-            eval_model = create_or_load_model(eval_sess, eval_model)
+            with tf.device("/cpu:0"):
+                eval_model = create_or_load_model(eval_sess, eval_model)
             step_time, loss = 0.0, 0.0
             # Run evals on development set and print their perplexity.
             for bucket_id in range(len(_buckets)):
@@ -367,15 +371,16 @@ def train():
 
 def decode():
     with tf.Session() as sess:
-        # Create model and load parameters.
-        model = create_model(sess, True)
-        model = create_or_load_model(sess, model)
-        dis_model = discriminator.create_model(max_encoder_seq_length=260,
-                                               num_layers=FLAGS.num_layers,
-                                               num_gpus=0,
-                                               num_dict_size=FLAGS.en_vocab_size,
-                                               latent_dim=FLAGS.size,
-                                               checkpoint_folder=FLAGS.train_dir)
+        with tf.device('/cpu:0'):
+            # Create model and load parameters.
+            model = create_model(sess, True)
+            model = create_or_load_model(sess, model)
+            dis_model = discriminator.create_model(max_encoder_seq_length=260,
+                                                   num_layers=FLAGS.num_layers,
+                                                   num_gpus=0,
+                                                   num_dict_size=FLAGS.en_vocab_size,
+                                                   latent_dim=FLAGS.size,
+                                                   checkpoint_folder=FLAGS.train_dir)
         model.batch_size = 1  # We decode one sentence at a time.
 
         # Load vocabularies.
