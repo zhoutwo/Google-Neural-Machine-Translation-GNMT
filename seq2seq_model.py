@@ -276,6 +276,8 @@ class Seq2SeqModel(object):
         # pad them if needed, reverse encoder inputs and add GO to decoder.
         for i in range(self.batch_size):
             encoder_input, decoder_input = data[bucket_id][i] if no_random else random.choice(data[bucket_id])
+            encoder_input = list(encoder_input)
+            decoder_input = list(decoder_input)
 
             # Encoder inputs are padded and then reversed.
             encoder_pad_size = (encoder_size - len(encoder_input))

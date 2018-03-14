@@ -135,6 +135,15 @@ def save_checkpoint(sess, model):
     checkpoint_path = os.path.join(FLAGS.train_dir, "translate.ckpt")
     model.saver.save(sess, checkpoint_path, global_step=model.global_step)
 
+
+def _get_outputs(ls):
+    # This is a greedy decoder - outputs are just argmaxes of eval_output_logits.
+    o = [int(np.argmax(l, axis=1)) for l in ls]
+    # If there is an EOS symbol in outputs, cut them at that point.
+    if data_utils.EOS_ID in o:
+        o = o[:o.index(data_utils.EOS_ID)]
+    return o
+
 def train():
     """Train a en->fr translation model using WMT data."""
     # Prepare WMT data.
@@ -171,8 +180,7 @@ def train():
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
         eval_model = create_model(eval_sess, True)
-        # No need to load the model here
-        # eval_model = create_or_load_model(eval_sess, eval_model)
+        eval_model = create_or_load_model(eval_sess, eval_model)
 
     # Read data into buckets and compute their sizes.
     print("Reading development and training data (limit: %d)."
@@ -187,82 +195,130 @@ def train():
     # the size if i-th training bucket, as used later.
     train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                            for i in range(len(train_bucket_sizes))]
-    with g_train.as_default():
-        # This is the training loop.
-        step_time, loss = 0.0, 0.0
-        current_step = 0
-        previous_losses = []
-        while True:
-            # Choose a bucket according to data distribution. We pick a random number
-            # in [0, 1] and use the corresponding interval in train_buckets_scale.
-            random_number_01 = np.random.random_sample()
-            bucket_id = min([i for i in range(len(train_buckets_scale))
-                             if train_buckets_scale[i] > random_number_01])
+    # This is the training loop.
+    step_time, loss = 0.0, 0.0
+    current_step = 0
+    previous_losses = []
+    while True:
+        # Choose a bucket according to data distribution. We pick a random number
+        # in [0, 1] and use the corresponding interval in train_buckets_scale.
+        random_number_01 = np.random.random_sample()
+        bucket_id = min([i for i in range(len(train_buckets_scale))
+                         if train_buckets_scale[i] > random_number_01])
 
-            # Get a batch and make a step.
-            start_time = time.time()
+        # Get a batch and make a step.
+        start_time = time.time()
+
+        # Normal training step: orig. input
+        print("Trainng generator with normal data")
+        with g_train.as_default():
             encoder_inputs, \
             decoder_inputs, \
             target_weights, \
             original_encoder_inputs, \
             original_decoder_inputs = train_model.get_batch(train_set, bucket_id)
             _, step_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
-            with g_eval.as_default():
-                eval_model = create_or_load_model(eval_sess, eval_model)
-                eval_encoder_inputs, eval_decoder_inputs, eval_target_weights, _, _ = eval_model.get_batch(
-                    {bucket_id: [(list(reversed(oe)), []) for oe in original_encoder_inputs]}, bucket_id
-                )
-                # Get output logits for the sentence.
-                _, _, eval_output_logits = eval_model.step(eval_sess, eval_encoder_inputs, eval_decoder_inputs,
-                                                 eval_target_weights, bucket_id, True)
-                # From num_decoder_tokens x batch_size x vocab_size to batch_size x num_decoder_tokens x 1 x vocab_size
-                eval_output_logits_transposed = [
-                    [(logits[i].reshape((1,) + logits[i].shape)) for logits in eval_output_logits]
-                    for i in range(eval_model.batch_size)
-                ]
-                def _get_outputs(ls):
-                    # This is a greedy decoder - outputs are just argmaxes of eval_output_logits.
-                    o = [int(np.argmax(l, axis=1)) for l in ls]
-                    # If there is an EOS symbol in outputs, cut them at that point.
-                    if data_utils.EOS_ID in o:
-                        o = o[:o.index(data_utils.EOS_ID)]
-                    return o
-                converted_outputs = [_get_outputs(ls) for ls in eval_output_logits_transposed]
-                print(converted_outputs)
-            step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
-            loss += step_loss / FLAGS.steps_per_checkpoint
-            current_step += 1
 
-            # Once in a while, we save checkpoint, print statistics, and run evals.
-            if current_step % FLAGS.steps_per_checkpoint == 0:
-                # Print statistics for the previous epoch.
-                perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
-                print("global step %d learning rate %.4f step-time %.2f perplexity "
-                      "%.2f" % (train_model.global_step.eval(), train_model.learning_rate.eval(),
-                                step_time, perplexity))
-                # Decrease learning rate if no improvement was seen over last 3 times.
-                if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
-                    train_sess.run(train_model.learning_rate_decay_op)
-                previous_losses.append(loss)
-                # Save checkpoint and zero timer and loss.
-                save_checkpoint(train_sess, train_model)
-                step_time, loss = 0.0, 0.0
-                # Run evals on development set and print their perplexity.
-                for bucket_id in range(len(_buckets)):
-                    if len(dev_set[bucket_id]) == 0:
-                        print("  eval: empty bucket %d" % (bucket_id))
-                        continue
-                    encoder_inputs, \
-                    decoder_inputs, \
-                    target_weights, \
-                    original_encoder_inputs, \
-                    original_decoder_inputs = train_model.get_batch(dev_set, bucket_id)
-                    _, eval_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs,
-                                                 target_weights, bucket_id, True)
-                    eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float(
-                        "inf")
-                    print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
-                sys.stdout.flush()
+        with g_eval.as_default():
+            eval_model = create_or_load_model(eval_sess, eval_model)
+            original_encoder_inputs_in_original_order = [(list(reversed(oe)), []) for oe in original_encoder_inputs]
+            eval_encoder_inputs, eval_decoder_inputs, eval_target_weights, _, _ = eval_model.get_batch(
+                {bucket_id: original_encoder_inputs_in_original_order}, bucket_id
+            )
+            # Get output logits for the sentence.
+            _, _, eval_output_logits = eval_model.step(eval_sess, eval_encoder_inputs, eval_decoder_inputs,
+                                             eval_target_weights, bucket_id, True)
+
+            # From num_decoder_tokens x batch_size x vocab_size to batch_size x num_decoder_tokens x 1 x vocab_size
+            eval_output_logits_transposed = [
+                [(logits[i].reshape((1,) + logits[i].shape)) for logits in eval_output_logits]
+                for i in range(eval_model.batch_size)
+            ]
+
+            for ls in eval_output_logits_transposed:
+                print(_get_outputs(ls))
+
+        print("Training discriminator with truth data")
+        # From num_encoder_tokens x batch_size to batch_size x num_encoder_tokens
+        encoder_inputs_transposed = [
+            [row[i] for row in encoder_inputs]
+            for i in range(train_model.batch_size)
+        ]
+        encoder_inputs_transposed_original_order = [
+            list(reversed(r)) for r in encoder_inputs_transposed
+        ]
+        # From num_decoder_tokens x batch_size to batch_size x num_decoder_tokens
+        decoder_inputs_transposed = [
+            [row[i] for row in decoder_inputs]
+            for i in range(train_model.batch_size)
+        ]
+        disc_in = np.array(
+            [discriminator.get_disc_input(encoder_inputs_transposed_original_order[i], decoder_inputs_transposed[i])
+            for i in range(train_model.batch_size)]
+        )
+        # disc_in = np.zeros(shape=(train_model.batch_size,)+)
+        disc_out = np.ones(shape=(train_model.batch_size, 1))
+        dis_loss = dis_model.train_on_batch(disc_in, disc_out)
+        print("Discriminator loss:", dis_loss)
+
+        print("Training generator with composed data")
+        with g_train.as_default():
+            def _pad_decode_in(di, s):
+                result = np.ones(shape=(s,)) * data_utils.PAD_ID
+                result[:len(di)] = di[:]
+                return result
+            new_enc_in = disc_in
+            new_dec_in = np.array([_pad_decode_in(d, 100) for d in decoder_inputs_transposed])
+
+            bucket_id_to_use = len(_buckets) - 1
+
+            new_encoder_inputs, \
+            new_decoder_inputs, \
+            new_target_weights, \
+            new_original_encoder_inputs, \
+            new_original_decoder_inputs = train_model.get_batch(
+                {bucket_id_to_use: [(new_enc_in[i], new_dec_in[i]) for i in range(train_model.batch_size)]}, bucket_id_to_use
+            )
+            _, new_step_loss, _ = train_model.step(train_sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id_to_use,
+                                               False)
+            print("New step loss:", new_step_loss)
+
+        step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
+        loss += (step_loss + dis_loss) / FLAGS.steps_per_checkpoint
+        current_step += 1
+
+        # Once in a while, we save checkpoint, print statistics, and run evals.
+        if current_step % FLAGS.steps_per_checkpoint == 0:
+            # Print statistics for the previous epoch.
+            perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
+            print("global generator step %d learning rate %.4f step-time %.2f perplexity "
+                  "%.2f" % (train_model.global_step.eval(), train_model.learning_rate.eval(),
+                            step_time, perplexity))
+            # Decrease learning rate if no improvement was seen over last 3 times.
+            if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+                train_sess.run(train_model.learning_rate_decay_op)
+            previous_losses.append(loss)
+            # Save checkpoint and zero timer and loss.
+            save_checkpoint(train_sess, train_model)
+            dis_model.save(os.path.join(FLAGS.train_dir, '/', str(train_model.global_step.eval()), '.h5'))
+            # Update eval_model with new weights
+            eval_model = create_or_load_model(eval_sess, eval_model)
+            step_time, loss = 0.0, 0.0
+            # Run evals on development set and print their perplexity.
+            for bucket_id in range(len(_buckets)):
+                if len(dev_set[bucket_id]) == 0:
+                    print("  eval: empty bucket %d" % (bucket_id))
+                    continue
+                encoder_inputs, \
+                decoder_inputs, \
+                target_weights, \
+                original_encoder_inputs, \
+                original_decoder_inputs = train_model.get_batch(dev_set, bucket_id)
+                _, eval_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs,
+                                             target_weights, bucket_id, True)
+                eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float("inf")
+                print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
+            sys.stdout.flush()
 
 
 def decode():
@@ -270,6 +326,12 @@ def decode():
         # Create model and load parameters.
         model = create_model(sess, True)
         model = create_or_load_model(sess, model)
+        dis_model = discriminator.create_model(max_encoder_seq_length=260,
+                                               num_layers=FLAGS.num_layers,
+                                               num_gpus=FLAGS.num_gpus,
+                                               num_dict_size=FLAGS.en_vocab_size,
+                                               latent_dim=FLAGS.size,
+                                               checkpoint_folder=FLAGS.train_dir)
         model.batch_size = 1  # We decode one sentence at a time.
 
         # Load vocabularies.
@@ -298,14 +360,55 @@ def decode():
                                 target_weights, \
                                 original_encoder_inputs, \
                                 original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
-                                # Get output logits for the sentence.
-                                _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                                                 target_weights, bucket_id, True)
-                                # This is a greedy decoder - outputs are just argmaxes of output_logits.
-                                outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-                                # If there is an EOS symbol in outputs, cut them at that point.
-                                if data_utils.EOS_ID in outputs:
-                                    outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+
+                                max_retries = 10
+                                threshold = 0.5
+                                for i in range(max_retries):
+                                    # Get output logits for the sentence.
+                                    _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                                                     target_weights, bucket_id, True)
+                                    # This is a greedy decoder - outputs are just argmaxes of output_logits.
+                                    outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+                                    # If there is an EOS symbol in outputs, cut them at that point.
+                                    if data_utils.EOS_ID in outputs:
+                                        outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+
+                                    assert model.batch_size == 1
+
+                                    # From num_encoder_tokens x batch_size to batch_size x num_encoder_tokens
+                                    encoder_inputs_transposed = [
+                                        [row[i] for row in encoder_inputs]
+                                        for i in range(model.batch_size)
+                                    ]
+                                    encoder_inputs_transposed_original_order = [
+                                        list(reversed(r)) for r in encoder_inputs_transposed
+                                    ]
+                                    # From num_decoder_tokens x batch_size to batch_size x num_decoder_tokens
+                                    # decoder_inputs_transposed = [
+                                    #     [row[i] for row in decoder_inputs]
+                                    #     for i in range(model.batch_size)
+                                    # ]
+                                    output_token_ids = outputs
+                                    disc_in = np.array(
+                                        [discriminator.get_disc_input(encoder_inputs_transposed_original_order[0],
+                                                                      output_token_ids)]
+                                    )
+                                    disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
+                                    disc_out = disc_out[0]
+                                    if disc_out > threshold:
+                                        break
+                                    else:
+                                        bucket_id = len(_buckets) - 1
+                                        new_enc_in = disc_in
+
+                                        encoder_inputs, \
+                                        decoder_inputs, \
+                                        target_weights, \
+                                        new_original_encoder_inputs, \
+                                        new_original_decoder_inputs = model.get_batch(
+                                            {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
+                                        )
+
                                 output_file.write((" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs])) + "\n")
                                 actual_input_file.write(line)
                             except Exception as e:
@@ -330,20 +433,59 @@ def decode():
                     target_weights, \
                     original_encoder_inputs, \
                     original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
-                    # Get output logits for the sentence.
-                    _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                                     target_weights, bucket_id, True)
-                    # This is a greedy decoder - outputs are just argmaxes of output_logits.
-                    outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-                    # If there is an EOS symbol in outputs, cut them at that point.
-                    if data_utils.EOS_ID in outputs:
-                        outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+                    max_retries = 10
+                    threshold = 0.5
+                    for i in range(max_retries):
+                        # Get output logits for the sentence.
+                        _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                                         target_weights, bucket_id, True)
+                        # This is a greedy decoder - outputs are just argmaxes of output_logits.
+                        outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+                        # If there is an EOS symbol in outputs, cut them at that point.
+                        if data_utils.EOS_ID in outputs:
+                            outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+
+                        assert model.batch_size == 1
+
+                        # From num_encoder_tokens x batch_size to batch_size x num_encoder_tokens
+                        encoder_inputs_transposed = [
+                            [row[i] for row in encoder_inputs]
+                            for i in range(model.batch_size)
+                        ]
+                        encoder_inputs_transposed_original_order = [
+                            list(reversed(r)) for r in encoder_inputs_transposed
+                        ]
+                        # From num_decoder_tokens x batch_size to batch_size x num_decoder_tokens
+                        # decoder_inputs_transposed = [
+                        #     [row[i] for row in decoder_inputs]
+                        #     for i in range(model.batch_size)
+                        # ]
+                        output_token_ids = outputs
+                        disc_in = np.array(
+                            [discriminator.get_disc_input(encoder_inputs_transposed_original_order[0],
+                                                          output_token_ids)]
+                        )
+                        disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
+                        disc_out = disc_out[0]
+                        if disc_out > threshold:
+                            break
+                        else:
+                            bucket_id = len(_buckets) - 1
+                            new_enc_in = disc_in
+
+                            encoder_inputs, \
+                            decoder_inputs, \
+                            target_weights, \
+                            new_original_encoder_inputs, \
+                            new_original_decoder_inputs = model.get_batch(
+                                {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
+                            )
+                    # Print out French sentence corresponding to outputs.
+                    print(" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs]))
+                    print("> ", end="")
+                    sys.stdout.flush()
                 except Exception as e:
                     print("Error occurred while decoding", sentence, ", and the error is:", str(e))
-                # Print out French sentence corresponding to outputs.
-                print(" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs]))
-                print("> ", end="")
-                sys.stdout.flush()
                 sentence = sys.stdin.readline()
 
 

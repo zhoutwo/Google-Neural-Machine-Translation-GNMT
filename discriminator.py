@@ -5,6 +5,7 @@ from __future__ import print_function
 import glob
 import numpy as np
 import tensorflow as tf
+import data_utils
 from keras.layers import Input, LSTM, Dense, Embedding
 from keras.models import Model, load_model
 
@@ -63,6 +64,36 @@ def get_discriminator_input(input, generated_output, eos_id, sos_id):
     input_copy[input_eos_index] = sos_id
     return input_copy
 
+
+def get_disc_input(encoder_in, decoder_in):
+    # Check if encoder_in has EOS_ID
+    if data_utils.EOS_ID in encoder_in:
+        print("Warning: EOS_ID in encoder input")
+        part1 = encoder_in[:encoder_in.index(data_utils.EOS_ID)]
+    elif data_utils.PAD_ID in encoder_in:
+        part1 = encoder_in[:encoder_in.index(data_utils.PAD_ID)]
+    else:
+        part1 = encoder_in[:]
+
+    if not data_utils.EOS_ID in decoder_in:
+        print("Warning: EOS_ID NOT in decoder input")
+        if data_utils.PAD_ID in decoder_in:
+            part2 = decoder_in[:decoder_in.index(data_utils.PAD_ID)]
+        else:
+            part2 = decoder_in[:]
+    else:
+        part2 = decoder_in[:decoder_in.index(data_utils.EOS_ID)+1] # Include the EOS token
+
+    assert len(part1) + len(part2) <= 260
+    result = np.zeros(shape=(260,))
+    result[:len(part1)] = part1[:]
+    if data_utils.GO_ID in decoder_in:
+        result[len(part1):len(part1) + len(part2)] = part2[:]
+    else:
+        result[len(part1)] = data_utils.GO_ID
+        result[len(part1) + 1:len(part1) + 1 + len(part2)] = part2[:]
+        result[len(part1) + 1 + len(part2)] = data_utils.EOS_ID
+    return result
 
 def step(step_input, eos_id, sos_id, tf_predicted_output, keras_dis_model, step_output=None):
     """
