@@ -230,7 +230,7 @@ def train():
             original_decoder_inputs = train_model.get_batch(train_set, bucket_id)
             _, step_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
             global_step = train_model.global_step.eval(session=train_sess)
-        writer.add_summary(tf.summary.scalar(name="generator_normal_loss", tensor=step_loss).eval(train_sess), global_step=global_step)
+        writer.add_summary(tf.summary.scalar(name="generator_normal_loss", tensor=step_loss).eval(session=train_sess), global_step=global_step)
         with g_eval.as_default():
             original_encoder_inputs_in_original_order = [(list(reversed(oe)), []) for oe in original_encoder_inputs]
             eval_encoder_inputs, eval_decoder_inputs, eval_target_weights, _, _ = eval_model.get_batch(
@@ -271,7 +271,7 @@ def train():
         disc_out = np.ones(shape=(train_model.batch_size, 1))
         dis_loss = dis_model.train_on_batch(disc_in, disc_out)
         print("Discriminator loss:", dis_loss)
-        writer.add_summary(tf.summary.scalar(name="discriminator_truth_loss", tensor=dis_loss).eval(train_sess),
+        writer.add_summary(tf.summary.scalar(name="discriminator_truth_loss", tensor=dis_loss).eval(session=train_sess),
                            global_step=global_step)
 
         print("Training discriminator with composed data")
@@ -294,7 +294,7 @@ def train():
         composed_disc_out = np.zeros((len(composed_disc_in_enc),))
         composed_dis_loss = dis_model.train_on_batch(composed_disc_in, composed_disc_out)
         print("Discriminator loss:", composed_dis_loss)
-        writer.add_summary(tf.summary.scalar(name="discriminator_composed_loss", tensor=composed_dis_loss).eval(train_sess),
+        writer.add_summary(tf.summary.scalar(name="discriminator_composed_loss", tensor=composed_dis_loss).eval(session=train_sess),
                            global_step=global_step+1)
 
         print("Training generator with composed false data")
@@ -318,7 +318,7 @@ def train():
                                                False)
             print("New step loss:", new_step_loss)
             global_step = train_model.global_step.eval(session=train_sess)
-        writer.add_summary(tf.summary.scalar(name="generator_composed_loss", tensor=new_step_loss).eval(train_sess),
+        writer.add_summary(tf.summary.scalar(name="generator_composed_loss", tensor=new_step_loss).eval(session=train_sess),
                            global_step=global_step)
 
         step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
@@ -332,11 +332,11 @@ def train():
             print("global generator step %d learning rate %.4f step-time %.2f perplexity "
                   "%.2f" % (global_step, train_model.learning_rate.eval(),
                             step_time, perplexity))
-            writer.add_summary(tf.summary.scalar(name="learn_rate", tensor=train_model.learning_rate).eval(train_sess),
+            writer.add_summary(tf.summary.scalar(name="learn_rate", tensor=train_model.learning_rate).eval(session=train_sess),
                                global_step=global_step)
-            writer.add_summary(tf.summary.scalar(name="train_step_time", tensor=step_time).eval(train_sess),
+            writer.add_summary(tf.summary.scalar(name="train_step_time", tensor=step_time).eval(session=train_sess),
                                global_step=global_step)
-            writer.add_summary(tf.summary.scalar(name="train_perplex", tensor=perplexity).eval(train_sess),
+            writer.add_summary(tf.summary.scalar(name="train_perplex", tensor=perplexity).eval(session=train_sess),
                                global_step=global_step)
             # Decrease learning rate if no improvement was seen over last 3 times.
             if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
@@ -364,7 +364,7 @@ def train():
                                              target_weights, bucket_id, True)
                 eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float("inf")
                 print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
-                writer.add_summary(tf.summary.scalar(name="eval_perplex_bucket_"+str(bucket_id), tensor=eval_ppx).eval(train_sess),
+                writer.add_summary(tf.summary.scalar(name="eval_perplex_bucket_"+str(bucket_id), tensor=eval_ppx).eval(session=train_sess),
                                    global_step=train_model.global_step)
             sys.stdout.flush()
 
