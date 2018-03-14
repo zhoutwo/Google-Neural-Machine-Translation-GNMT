@@ -66,6 +66,8 @@ def get_discriminator_input(input, generated_output, eos_id, sos_id):
 
 
 def get_disc_input(encoder_in, decoder_in):
+    encoder_in = list(encoder_in)
+    decoder_in = list(decoder_in)
     # Check if encoder_in has EOS_ID
     if data_utils.EOS_ID in encoder_in:
         print("Warning: EOS_ID in encoder input")

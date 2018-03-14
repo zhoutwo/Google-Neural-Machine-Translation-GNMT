@@ -144,6 +144,11 @@ def _get_outputs(ls):
         o = o[:o.index(data_utils.EOS_ID)]
     return o
 
+def _pad_decode_in(di, s):
+    result = np.ones(shape=(s,)) * data_utils.PAD_ID
+    result[:len(di)] = di[:]
+    return result
+
 def train():
     """Train a en->fr translation model using WMT data."""
     # Prepare WMT data.
@@ -220,7 +225,6 @@ def train():
             _, step_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
 
         with g_eval.as_default():
-            eval_model = create_or_load_model(eval_sess, eval_model)
             original_encoder_inputs_in_original_order = [(list(reversed(oe)), []) for oe in original_encoder_inputs]
             eval_encoder_inputs, eval_decoder_inputs, eval_target_weights, _, _ = eval_model.get_batch(
                 {bucket_id: original_encoder_inputs_in_original_order}, bucket_id
@@ -261,14 +265,34 @@ def train():
         dis_loss = dis_model.train_on_batch(disc_in, disc_out)
         print("Discriminator loss:", dis_loss)
 
-        print("Training generator with composed data")
+        print("Training discriminator with composed data")
+        eval_output_tokens = [_pad_decode_in(_get_outputs(ls), 100) for ls in eval_output_logits_transposed]
+        composed_disc_in_enc = []
+        composed_decoder_out = []
+        for i in range(train_model.batch_size):
+            e = encoder_inputs_transposed_original_order[i]
+            d = eval_output_tokens[i]
+            assert data_utils.GO_ID in decoder_inputs_transposed[0]
+            dt = [_pad_decode_in(line[1:], 100) for line in decoder_inputs_transposed] # Get rid of GO_ID
+            if not np.array_equal(d, dt):
+                composed_disc_in_enc.append(e)
+                composed_decoder_out.append(d)
+        composed_disc_in = np.array(
+            [discriminator.get_disc_input(composed_disc_in_enc[i], composed_decoder_out[i])
+             for i in range(len(composed_disc_in_enc))]
+        )
+        composed_decoder_out = np.array(composed_decoder_out)
+        composed_disc_out = np.zeros((len(composed_disc_in_enc),))
+        composed_dis_loss = dis_model.train_on_batch(composed_disc_in, composed_disc_out)
+        print("Discriminator loss:", composed_dis_loss)
+
+        print("Training generator with composed false data")
         with g_train.as_default():
-            def _pad_decode_in(di, s):
-                result = np.ones(shape=(s,)) * data_utils.PAD_ID
-                result[:len(di)] = di[:]
-                return result
-            new_enc_in = disc_in
-            new_dec_in = np.array([_pad_decode_in(d, 100) for d in decoder_inputs_transposed])
+            new_enc_in = composed_disc_in
+            new_dec_in = [
+                _pad_decode_in(line[:line.index(data_utils.EOS_ID)], 100) if data_utils.EOS_ID in line else line
+                for line in composed_decoder_out
+            ]
 
             bucket_id_to_use = len(_buckets) - 1
 
