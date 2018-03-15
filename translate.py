@@ -26,7 +26,6 @@ import numpy as np
 import tensorflow as tf
 import seq2seq_model
 import data_utils
-import discriminator
 
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99,
@@ -157,6 +156,8 @@ def _reset_tf_graph_random_seed():
 
 def train():
     """Train a en->fr translation model using WMT data."""
+    # Importing after random seed is set
+    import discriminator
     # Prepare WMT data.
     print("Preparing WMT data in %s" % FLAGS.data_dir)
     en_train, fr_train, en_dev, fr_dev, _, _ = data_utils.prepare_wmt_data(
@@ -412,6 +413,9 @@ def train():
 
 
 def decode():
+    # Importing after random seed is set
+    import discriminator
+
     with tf.Session() as sess:
         with tf.device('/cpu:0'):
             # Create model and load parameters.
