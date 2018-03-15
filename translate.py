@@ -35,6 +35,7 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5.0,
                           "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
+tf.app.flags.DEFINE_integer("seed", None, "Random seed to use.")
 tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 4, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("num_gpus", 0, "Number of GPUs available.")
@@ -150,6 +151,10 @@ def _pad_decode_in(di, s):
     result[:len(di)] = di[:]
     return result
 
+def _reset_tf_graph_random_seed():
+    if FLAGS.seed is not None:
+        tf.set_random_seed(FLAGS.seed)
+
 def train():
     """Train a en->fr translation model using WMT data."""
     # Prepare WMT data.
@@ -177,6 +182,8 @@ def train():
     writer = None
     summary = None
     with g_train.as_default():
+        _reset_tf_graph_random_seed()
+
         print("Creating model in the training session")
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
@@ -186,6 +193,8 @@ def train():
         writer = tf.summary.FileWriter(logdir=FLAGS.log_dir, graph=g_train)
 
     with g_eval.as_default():
+        _reset_tf_graph_random_seed()
+
         print("Creating model in the eval session")
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
@@ -224,6 +233,8 @@ def train():
         # Normal training step: orig. input
         print("Trainng generator with normal data")
         with g_train.as_default():
+            _reset_tf_graph_random_seed()
+
             encoder_inputs, \
             decoder_inputs, \
             target_weights, \
@@ -235,6 +246,8 @@ def train():
             # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
 
         with g_eval.as_default():
+            _reset_tf_graph_random_seed()
+
             original_encoder_inputs_in_original_order = [(list(reversed(oe)), []) for oe in original_encoder_inputs]
             eval_encoder_inputs, eval_decoder_inputs, eval_target_weights, _, _ = eval_model.get_batch(
                 {bucket_id: original_encoder_inputs_in_original_order}, bucket_id
@@ -276,6 +289,8 @@ def train():
         print("Discriminator loss:", dis_loss)
 
         with g_train.as_default():
+            _reset_tf_graph_random_seed()
+
             summary.value.add(tag="discriminator_truth_loss", simple_value=dis_loss)
             # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
 
@@ -301,6 +316,8 @@ def train():
         print("Discriminator loss:", composed_dis_loss)
 
         with g_train.as_default():
+            _reset_tf_graph_random_seed()
+
             summary.value.add(tag="discriminator_composed_loss", simple_value=composed_dis_loss)
             writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
             writer.flush()
@@ -308,6 +325,8 @@ def train():
 
         print("Training generator with composed false data")
         with g_train.as_default():
+            _reset_tf_graph_random_seed()
+
             new_enc_in = composed_disc_in
             new_dec_in = [
                 _pad_decode_in(line[:line.index(data_utils.EOS_ID)], 100) if data_utils.EOS_ID in line else line
@@ -343,6 +362,8 @@ def train():
             perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
 
             with g_train.as_default():
+                _reset_tf_graph_random_seed()
+
                 print("global generator step %d learning rate %.4f step-time %.2f perplexity "
                       "%.2f" % (global_step, train_model.learning_rate.eval(session=train_sess),
                                 step_time, perplexity))
@@ -357,6 +378,8 @@ def train():
             previous_losses.append(loss)
             # Save checkpoint and zero timer and loss.
             with g_train.as_default():
+                _reset_tf_graph_random_seed()
+
                 save_checkpoint(train_sess, train_model)
                 dis_model.save(os.path.join(FLAGS.train_dir, str(train_model.global_step.eval(session=train_sess)) + '.h5'))
             # Update eval_model with new weights
@@ -365,6 +388,8 @@ def train():
             step_time, loss = 0.0, 0.0
             # Run evals on development set and print their perplexity.
             with g_train.as_default():
+                _reset_tf_graph_random_seed()
+
                 for bucket_id in range(len(_buckets)):
                     if len(dev_set[bucket_id]) == 0:
                         print("  eval: empty bucket %d" % (bucket_id))
@@ -579,6 +604,10 @@ def self_test():
 
 
 def main(_):
+    if FLAGS.seed is not None:
+        random.seed(FLAGS.seed)
+        np.random.seed(FLAGS.seed)
+
     if FLAGS.self_test:
         self_test()
     elif FLAGS.decode:
