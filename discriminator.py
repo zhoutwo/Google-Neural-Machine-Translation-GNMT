@@ -41,7 +41,7 @@ def create_model(max_encoder_seq_length=200, num_layers=1, num_gpus=0, num_dict_
                 discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(i), return_sequences=True)(discriminator)
         with tf.device('/device:GPU:' + str(num_layers % num_gpus)):
             discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1))(discriminator)
-    output = Dense(1, activation='relu')(discriminator)
+    output = Dense(1, activation='sigmoid')(discriminator)
 
     model = Model(inputs, output)
     model.compile(optimizer='adam', loss='mse')
