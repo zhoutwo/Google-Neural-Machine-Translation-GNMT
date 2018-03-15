@@ -191,7 +191,7 @@ class Seq2SeqModel(object):
             self.updates = []
             opt = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate)
             for b in range(len(buckets)):
-                with tf.device('/device:GPU:6'):
+                with tf.device('/cpu:0'):
                     gradients = tf.gradients(ys=self.losses[b], xs=params)
                 with tf.device('/device:GPU:4'):
                     clipped_gradients, norm = tf.clip_by_global_norm(t_list=gradients,
