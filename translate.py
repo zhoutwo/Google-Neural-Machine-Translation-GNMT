@@ -174,7 +174,6 @@ def train():
                                                num_dict_size=FLAGS.en_vocab_size,
                                                latent_dim=FLAGS.size,
                                                checkpoint_folder=FLAGS.train_dir)
-        dis_model.save(os.path.join(FLAGS.train_dir, '/' + str(0) + '.h5'))
     writer = None
     summary = None
     with g_train.as_default():
