@@ -271,7 +271,7 @@ def train():
             for i in range(train_model.batch_size)]
         )
         # disc_in = np.zeros(shape=(train_model.batch_size,)+)
-        disc_out = np.ones(shape=(train_model.batch_size, 1)) * 0.99
+        disc_out = np.ones(shape=(train_model.batch_size, 1))
         dis_loss = dis_model.train_on_batch(disc_in, disc_out)
         print("Discriminator loss:", dis_loss)
 
@@ -296,7 +296,7 @@ def train():
              for i in range(len(composed_disc_in_enc))]
         )
         composed_decoder_out = np.array(composed_decoder_out)
-        composed_disc_out = np.ones((len(composed_disc_in_enc),)) * 0.01 #np.zeros((len(composed_disc_in_enc),))
+        composed_disc_out = np.zeros((len(composed_disc_in_enc),))
         composed_dis_loss = dis_model.train_on_batch(composed_disc_in, composed_disc_out)
         print("Discriminator loss:", composed_dis_loss)
 
