@@ -184,7 +184,6 @@ def train():
             train_model = create_model(train_sess, False)
             train_model = create_or_load_model(train_sess, train_model, initial_save=True)
         writer = tf.summary.FileWriter(logdir=FLAGS.log_dir, graph=g_train)
-        summary = tf.Summary()
 
     with g_eval.as_default():
         print("Creating model in the eval session")
@@ -211,6 +210,7 @@ def train():
     step_time, loss = 0.0, 0.0
     current_step = 0
     previous_losses = []
+    summary = tf.Summary()
     while True:
         # Choose a bucket according to data distribution. We pick a random number
         # in [0, 1] and use the corresponding interval in train_buckets_scale.
@@ -232,7 +232,7 @@ def train():
             _, step_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
 
             summary.value.add(tag="generator_normal_loss", simple_value=step_loss)
-            writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
+            # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
 
         with g_eval.as_default():
             original_encoder_inputs_in_original_order = [(list(reversed(oe)), []) for oe in original_encoder_inputs]
@@ -277,7 +277,7 @@ def train():
 
         with g_train.as_default():
             summary.value.add(tag="discriminator_truth_loss", simple_value=dis_loss)
-            writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
+            # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
 
         print("Training discriminator with composed data")
         eval_output_tokens = [_pad_decode_in(_get_outputs(ls), 100) for ls in eval_output_logits_transposed]
@@ -303,6 +303,8 @@ def train():
         with g_train.as_default():
             summary.value.add(tag="discriminator_composed_loss", simple_value=composed_dis_loss)
             writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
+            writer.flush()
+            summary = tf.Summary()
 
         print("Training generator with composed false data")
         with g_train.as_default():
@@ -328,6 +330,8 @@ def train():
 
             summary.value.add(tag="generator_composed_loss", simple_value=new_step_loss)
             writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
+            writer.flush()
+            summary = tf.Summary()
 
         step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
         loss += (step_loss + dis_loss) / FLAGS.steps_per_checkpoint
@@ -345,7 +349,7 @@ def train():
                 summary.value.add(tag="learn_rate", simple_value=train_model.learning_rate.eval(session=train_sess))
                 summary.value.add(tag="train_step_time", simple_value=step_time)
                 summary.value.add(tag="train_perplex", simple_value=perplexity)
-                writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
+                # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
 
             # Decrease learning rate if no improvement was seen over last 3 times.
             if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
@@ -377,6 +381,8 @@ def train():
                 with g_train.as_default():
                     summary.value.add(tag="eval_perplex_bucket_"+str(bucket_id), simple_value=eval_ppx)
                     writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
+                    writer.flush()
+                    summary = tf.Summary()
             sys.stdout.flush()
 
 
