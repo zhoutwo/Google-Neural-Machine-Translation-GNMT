@@ -815,7 +815,8 @@ def embedding_attention_seq2seq(encoder_inputs,
                                                     embedding_size=embedding_size / 2)
         encoder_bw_cell = EmbeddingWrapper(single_cell_2, embedding_classes=num_encoder_symbols,
                                                     embedding_size=embedding_size / 2)
-        outputs, _, _ = static_bidirectional_rnn(encoder_fw_cell, encoder_bw_cell, encoder_inputs, dtype=dtype)
+        with tf.device('/device:GPU:3'):
+            outputs, _, _ = static_bidirectional_rnn(encoder_fw_cell, encoder_bw_cell, encoder_inputs, dtype=dtype)
 
         list_of_cell = []
         for layer in range(num_layers):
@@ -828,13 +829,15 @@ def embedding_attention_seq2seq(encoder_inputs,
 
         cell2 = Stack_Residual_RNNCell.Stack_Residual_RNNCell(list_of_cell)
 
-        encoder_outputs, encoder_state = static_rnn(
-            cell=cell2, inputs=outputs, dtype=dtype)
+        with tf.device('/device:GPU:5'):
+            encoder_outputs, encoder_state = static_rnn(
+                cell=cell2, inputs=outputs, dtype=dtype)
 
         # First calculate a concatenation of encoder outputs to put attention on.
-        top_states = [array_ops.reshape(tensor=e, shape=[-1, 1, cell.output_size])
-                      for e in encoder_outputs]
-        attention_states = array_ops.concat(axis=1, values=top_states)
+        with tf.device('/device:GPU:2'):
+            top_states = [array_ops.reshape(tensor=e, shape=[-1, 1, cell.output_size])
+                          for e in encoder_outputs]
+            attention_states = array_ops.concat(axis=1, values=top_states)
 
         # Decoder.
         output_size = None

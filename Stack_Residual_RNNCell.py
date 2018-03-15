@@ -58,21 +58,22 @@ class Stack_Residual_RNNCell(RNNCell):
         past_inp = tf.zeros_like(tensor=cur_inp)
       new_states = []
       for i, cell in enumerate(self._cells):
-        with vs.variable_scope("Cell%d" % i):
-          if self._state_is_tuple:
-            if not nest.is_sequence(seq=state):
-              raise ValueError(
-                  "Expected state to be a tuple of length %d, but received: %s"
-                  % (len(self.state_size), state))
-            cur_state = state[i]
-          else:
-            cur_state = array_ops.slice(input_=state, begin=[0, cur_state_pos], size=[-1, cell.state_size])
-            cur_state_pos += cell.state_size
-          if self._use_residual_connections:
-            cur_inp += past_inp
-            past_inp = cur_inp
-          cur_inp, new_state = cell(cur_inp, cur_state)
-          new_states.append(new_state)
+        with tf.device('/device:GPU:' + str(i % 8)):
+          with vs.variable_scope("Cell%d" % i):
+            if self._state_is_tuple:
+              if not nest.is_sequence(seq=state):
+                raise ValueError(
+                    "Expected state to be a tuple of length %d, but received: %s"
+                    % (len(self.state_size), state))
+              cur_state = state[i]
+            else:
+              cur_state = array_ops.slice(input_=state, begin=[0, cur_state_pos], size=[-1, cell.state_size])
+              cur_state_pos += cell.state_size
+            if self._use_residual_connections:
+              cur_inp += past_inp
+              past_inp = cur_inp
+            cur_inp, new_state = cell(cur_inp, cur_state)
+            new_states.append(new_state)
     new_states = (tuple(new_states) if self._state_is_tuple
                   else array_ops.concat(axis=1, values=new_states))
     return cur_inp, new_states

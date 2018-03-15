@@ -71,30 +71,33 @@ class Seq2SeqModel(object):
         self.target_vocab_size = target_vocab_size
         self.buckets = buckets
         self.batch_size = batch_size
-        self.learning_rate = tf.Variable(
-            float(learning_rate), trainable=False, dtype=dtype)
-        self.learning_rate_decay_op = self.learning_rate.assign(
-            self.learning_rate * learning_rate_decay_factor)
-        self.global_step = tf.Variable(0, trainable=False)
+        with tf.device('/device:GPU:2'):
+            self.learning_rate = tf.Variable(
+                float(learning_rate), trainable=False, dtype=dtype)
+            self.learning_rate_decay_op = self.learning_rate.assign(
+                self.learning_rate * learning_rate_decay_factor)
+            self.global_step = tf.Variable(0, trainable=False)
 
         # If we use sampled softmax, we need an output projection.
         output_projection = None
         softmax_loss_function = None
         # Sampled softmax only makes sense if we sample less than vocabulary size.
         if num_samples > 0 and num_samples < self.target_vocab_size:
-            w_t = tf.get_variable("proj_w", [self.target_vocab_size, size], dtype=dtype)
-            w = tf.transpose(w_t)
-            b = tf.get_variable("proj_b", [self.target_vocab_size], dtype=dtype)
-            output_projection = (w, b)
+            with tf.device('/device:GPU:1'):
+                w_t = tf.get_variable("proj_w", [self.target_vocab_size, size], dtype=dtype)
+                w = tf.transpose(w_t)
+                b = tf.get_variable("proj_b", [self.target_vocab_size], dtype=dtype)
+                output_projection = (w, b)
 
             def sampled_loss(logits, labels):
-                labels = tf.reshape(labels, [-1, 1])
-                labels = tf.cast(labels, tf.float32)
-                # We need to compute the sampled_softmax_loss using 32bit floats to
-                # avoid numerical instabilities.
-                local_w_t = tf.cast(w_t, tf.float32)
-                local_b = tf.cast(b, tf.float32)
-                local_inputs = tf.cast(logits, tf.float32)
+                with tf.device('/device:GPU:3'):
+                    labels = tf.reshape(labels, [-1, 1])
+                    labels = tf.cast(labels, tf.float32)
+                    # We need to compute the sampled_softmax_loss using 32bit floats to
+                    # avoid numerical instabilities.
+                    local_w_t = tf.cast(w_t, tf.float32)
+                    local_b = tf.cast(b, tf.float32)
+                    local_inputs = tf.cast(logits, tf.float32)
                 return tf.cast(
                     tf.nn.sampled_softmax_loss(weights=local_w_t,
                                                biases=local_b,
@@ -138,14 +141,15 @@ class Seq2SeqModel(object):
         self.encoder_inputs = []
         self.decoder_inputs = []
         self.target_weights = []
-        for i in range(buckets[-1][0]):  # Last bucket is the biggest one.
-            self.encoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
-                                                      name="encoder{0}".format(i)))
-        for i in range(buckets[-1][1] + 1):
-            self.decoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
-                                                      name="decoder{0}".format(i)))
-            self.target_weights.append(tf.placeholder(dtype, shape=[None],
-                                                      name="weight{0}".format(i)))
+        with tf.device('/device:GPU:2'):
+            for i in range(buckets[-1][0]):  # Last bucket is the biggest one.
+                self.encoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
+                                                          name="encoder{0}".format(i)))
+            for i in range(buckets[-1][1] + 1):
+                self.decoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
+                                                          name="decoder{0}".format(i)))
+                self.target_weights.append(tf.placeholder(dtype, shape=[None],
+                                                          name="weight{0}".format(i)))
 
         # Our targets are decoder inputs shifted by one.
         targets = [self.decoder_inputs[i + 1]
@@ -153,29 +157,32 @@ class Seq2SeqModel(object):
 
         # Training outputs and losses.
         if forward_only:
-            self.outputs, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(encoder_inputs=self.encoder_inputs,
-                                                                                     decoder_inputs=self.decoder_inputs,
-                                                                                     targets=targets,
-                                                                                     weights=self.target_weights,
-                                                                                     buckets=buckets,
-                                                                                     seq2seq=lambda x, y: seq2seq_f(x, y, True),
-                                                                                     softmax_loss_function=softmax_loss_function)
+            with tf.device('/device:GPU:4'):
+                self.outputs, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(encoder_inputs=self.encoder_inputs,
+                                                                                         decoder_inputs=self.decoder_inputs,
+                                                                                         targets=targets,
+                                                                                         weights=self.target_weights,
+                                                                                         buckets=buckets,
+                                                                                         seq2seq=lambda x, y: seq2seq_f(x, y, True),
+                                                                                         softmax_loss_function=softmax_loss_function)
             # If we use output projection, we need to project outputs for decoding.
             if output_projection is not None:
-                for b in range(len(buckets)):
-                    self.outputs[b] = [
-                        tf.matmul(a=output,
-                                  b=output_projection[0]) + output_projection[1]
-                        for output in self.outputs[b]
-                    ]
+                with tf.device('/device:GPU:5'):
+                    for b in range(len(buckets)):
+                        self.outputs[b] = [
+                            tf.matmul(a=output,
+                                      b=output_projection[0]) + output_projection[1]
+                            for output in self.outputs[b]
+                        ]
         else:
-            self.outputs, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(encoder_inputs=self.encoder_inputs,
-                                                                                     decoder_inputs=self.decoder_inputs,
-                                                                                     targets=targets,
-                                                                                     weights=self.target_weights,
-                                                                                     buckets=buckets,
-                                                                                     seq2seq=lambda x, y: seq2seq_f(x, y, False),
-                                                                                     softmax_loss_function=softmax_loss_function)
+            with tf.device('/device:GPU:4'):
+                self.outputs, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(encoder_inputs=self.encoder_inputs,
+                                                                                         decoder_inputs=self.decoder_inputs,
+                                                                                         targets=targets,
+                                                                                         weights=self.target_weights,
+                                                                                         buckets=buckets,
+                                                                                         seq2seq=lambda x, y: seq2seq_f(x, y, False),
+                                                                                         softmax_loss_function=softmax_loss_function)
 
         # Gradients and SGD update operation for training the model.
         params = tf.trainable_variables()
@@ -184,12 +191,14 @@ class Seq2SeqModel(object):
             self.updates = []
             opt = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate)
             for b in range(len(buckets)):
-                gradients = tf.gradients(ys=self.losses[b], xs=params)
-                clipped_gradients, norm = tf.clip_by_global_norm(t_list=gradients,
-                                                                 clip_norm=max_gradient_norm)
-                self.gradient_norms.append(norm)
-                self.updates.append(opt.apply_gradients(grads_and_vars=zip(clipped_gradients, params),
-                                                        global_step=self.global_step))
+                with tf.device('/device:GPU:6'):
+                    gradients = tf.gradients(ys=self.losses[b], xs=params)
+                with tf.device('/device:GPU:4'):
+                    clipped_gradients, norm = tf.clip_by_global_norm(t_list=gradients,
+                                                                     clip_norm=max_gradient_norm)
+                    self.gradient_norms.append(norm)
+                    self.updates.append(opt.apply_gradients(grads_and_vars=zip(clipped_gradients, params),
+                                                            global_step=self.global_step))
 
         self.saver = tf.train.Saver(tf.all_variables(), max_to_keep=None)
 
