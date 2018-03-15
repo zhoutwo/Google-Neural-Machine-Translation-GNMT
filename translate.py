@@ -341,11 +341,11 @@ def train():
         if current_step % FLAGS.steps_per_checkpoint == 0:
             # Print statistics for the previous epoch.
             perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
-            print("global generator step %d learning rate %.4f step-time %.2f perplexity "
-                  "%.2f" % (global_step, train_model.learning_rate.eval(),
-                            step_time, perplexity))
 
             with g_train.as_default():
+                print("global generator step %d learning rate %.4f step-time %.2f perplexity "
+                      "%.2f" % (global_step, train_model.learning_rate.eval(session=train_sess),
+                                step_time, perplexity))
                 summary.value.add(tag="learn_rate", simple_value=train_model.learning_rate.eval(session=train_sess))
                 summary.value.add(tag="train_step_time", simple_value=step_time)
                 summary.value.add(tag="train_perplex", simple_value=perplexity)
@@ -364,21 +364,21 @@ def train():
                 eval_model = create_or_load_model(eval_sess, eval_model)
             step_time, loss = 0.0, 0.0
             # Run evals on development set and print their perplexity.
-            for bucket_id in range(len(_buckets)):
-                if len(dev_set[bucket_id]) == 0:
-                    print("  eval: empty bucket %d" % (bucket_id))
-                    continue
-                encoder_inputs, \
-                decoder_inputs, \
-                target_weights, \
-                original_encoder_inputs, \
-                original_decoder_inputs = train_model.get_batch(dev_set, bucket_id)
-                _, eval_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs,
-                                             target_weights, bucket_id, True)
-                eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float("inf")
-                print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
+            with g_train.as_default():
+                for bucket_id in range(len(_buckets)):
+                    if len(dev_set[bucket_id]) == 0:
+                        print("  eval: empty bucket %d" % (bucket_id))
+                        continue
+                    encoder_inputs, \
+                    decoder_inputs, \
+                    target_weights, \
+                    original_encoder_inputs, \
+                    original_decoder_inputs = train_model.get_batch(dev_set, bucket_id)
+                    _, eval_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs,
+                                                 target_weights, bucket_id, True)
+                    eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float("inf")
+                    print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
 
-                with g_train.as_default():
                     summary.value.add(tag="eval_perplex_bucket_"+str(bucket_id), simple_value=eval_ppx)
                     writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
                     writer.flush()
