@@ -11,7 +11,7 @@ from keras.models import Model, load_model
 
 
 def _get_step_num(fn):
-    num = fn[(len(fn) - 1 - fn[::-1].index('/')):-3]
+    num = fn[(len(fn) - fn[::-1].index('/')):-3]
     return int(num)
 
 def create_model(max_encoder_seq_length=200, num_layers=1, num_gpus=0, num_dict_size=40000, latent_dim=1024, checkpoint_folder=None):
