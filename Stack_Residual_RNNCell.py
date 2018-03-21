@@ -59,8 +59,8 @@ class Stack_Residual_RNNCell(RNNCell):
         past_inp = tf.zeros_like(tensor=cur_inp)
       new_states = []
       if self._num_gpus:
-        with tf.device('/device:GPU:' + str(i % 8)):
-          for i, cell in enumerate(self._cells):
+        for i, cell in enumerate(self._cells):
+          with tf.device('/device:GPU:' + str(i % 8)):
             with vs.variable_scope("Cell%d" % i):
               if self._state_is_tuple:
                 if not nest.is_sequence(seq=state):
