@@ -302,12 +302,13 @@ def self_test():
 
 
 def main(_):
-    if FLAGS.self_test:
-        self_test()
-    elif FLAGS.decode:
-        decode()
-    else:
-        train()
+    with tf.device('/cpu:0'):
+        if FLAGS.self_test:
+            self_test()
+        elif FLAGS.decode:
+            decode()
+        else:
+            train()
 
 
 if __name__ == "__main__":
