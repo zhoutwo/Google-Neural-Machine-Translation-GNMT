@@ -154,6 +154,13 @@ def _reset_tf_graph_random_seed():
     if FLAGS.seed is not None:
         tf.set_random_seed(FLAGS.seed)
 
+def _convert_outputs(outputs, rev_vocab):
+    # If there is an EOS symbol in outputs, cut them at that point.
+    if data_utils.EOS_ID in outputs:
+        print("EOS_ID detected in outputs, index:", outputs.index(data_utils.EOS_ID))
+        outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+    return " ".join([tf.compat.as_str(rev_vocab[output]) for output in outputs])
+
 def train():
     """Train a en->fr translation model using WMT data."""
     # Importing after random seed is set
@@ -162,6 +169,11 @@ def train():
     print("Preparing WMT data in %s" % FLAGS.data_dir)
     en_train, fr_train, en_dev, fr_dev, _, _ = data_utils.prepare_wmt_data(
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.fr_vocab_size)
+
+    # Load vocabularies.
+    fr_vocab_path = os.path.join(FLAGS.data_dir,
+                                 "vocab%d.fr" % FLAGS.fr_vocab_size)
+    _, rev_fr_vocab = data_utils.initialize_vocabulary(fr_vocab_path)
 
     config = tf.ConfigProto(log_device_placement=False,
                             allow_soft_placement=True)
@@ -504,7 +516,7 @@ def decode():
                                             {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
                                         )
 
-                                output_file.write((" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs])) + "\n")
+                                output_file.write(_convert_outputs(outputs, rev_fr_vocab) + "\n")
                                 actual_input_file.write(line)
                             except Exception as e:
                                 print("Error occurred while decoding", line, ", and the error was:", str(e))
@@ -576,7 +588,7 @@ def decode():
                                 {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
                             )
                     # Print out French sentence corresponding to outputs.
-                    print(" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs]))
+                    print(_convert_outputs(outputs, rev_fr_vocab))
                     print("> ", end="")
                     sys.stdout.flush()
                 except Exception as e:
