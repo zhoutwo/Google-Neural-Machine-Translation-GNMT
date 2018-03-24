@@ -47,6 +47,10 @@ tf.app.flags.DEFINE_integer("max_train_data_size", 0,
                             "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
                             "How many training steps to do per checkpoint.")
+tf.app.flags.DEFINE_integer("steps_start_train_discriminator", 0,
+                            "How many training steps before start training the discriminator.")
+tf.app.flags.DEFINE_integer("steps_start_train_generator_composed", 0,
+                            "How many training steps before start training the generator with composed data.")
 tf.app.flags.DEFINE_boolean("decode", False,
                             "Set to True for interactive decoding.")
 tf.app.flags.DEFINE_string("decode_input", None, "Input file to decode.")
@@ -283,7 +287,7 @@ def train():
             for ls in eval_output_logits_transposed:
                 print(_get_outputs(ls))
 
-        print("Training discriminator with truth data")
+        # Discriminator truth data
         # From num_encoder_tokens x batch_size to batch_size x num_encoder_tokens
         encoder_inputs_transposed = [
             [row[i] for row in encoder_inputs]
@@ -299,20 +303,11 @@ def train():
         ]
         disc_in = np.array(
             [discriminator.get_disc_input(encoder_inputs_transposed_original_order[i], decoder_inputs_transposed[i])
-            for i in range(train_model.batch_size)]
+             for i in range(train_model.batch_size)]
         )
-        # disc_in = np.zeros(shape=(train_model.batch_size,)+)
         disc_out = np.ones(shape=(train_model.batch_size, 1))
-        dis_loss = dis_model.train_on_batch(disc_in, disc_out)
-        print("Discriminator truth loss:", dis_loss)
 
-        with g_train.as_default():
-            _reset_tf_graph_random_seed()
-
-            summary.value.add(tag="discriminator_truth_loss", simple_value=dis_loss)
-            # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
-
-        print("Training discriminator with composed data")
+        # Discriminator composed data
         eval_output_tokens = [_pad_decode_in(_get_outputs(ls), 100) for ls in eval_output_logits_transposed]
         composed_disc_in_enc = []
         composed_decoder_out = []
@@ -320,7 +315,7 @@ def train():
             e = encoder_inputs_transposed_original_order[i]
             d = eval_output_tokens[i]
             assert data_utils.GO_ID in decoder_inputs_transposed[0]
-            dt = [_pad_decode_in(line[1:], 100) for line in decoder_inputs_transposed] # Get rid of GO_ID
+            dt = [_pad_decode_in(line[1:], 100) for line in decoder_inputs_transposed]  # Get rid of GO_ID
             if not np.array_equal(d, dt):
                 composed_disc_in_enc.append(e)
                 composed_decoder_out.append(d)
@@ -330,39 +325,62 @@ def train():
         )
         composed_decoder_out = np.array(composed_decoder_out)
         composed_disc_out = np.zeros((len(composed_disc_in_enc),))
-        composed_dis_loss = dis_model.train_on_batch(composed_disc_in, composed_disc_out)
-        print("Discriminator composed loss:", composed_dis_loss)
+
+        if current_step >= FLAGS.steps_start_train_discriminator:
+            print("Training discriminator with truth data")
+            dis_loss = dis_model.train_on_batch(disc_in, disc_out)
+            print("Discriminator truth loss:", dis_loss)
+
+            with g_train.as_default():
+                _reset_tf_graph_random_seed()
+
+                summary.value.add(tag="discriminator_truth_loss", simple_value=dis_loss)
+                # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
+
+            print("Training discriminator with composed data")
+            composed_dis_loss = dis_model.train_on_batch(composed_disc_in, composed_disc_out)
+            print("Discriminator composed loss:", composed_dis_loss)
+
+            with g_train.as_default():
+                _reset_tf_graph_random_seed()
+
+                summary.value.add(tag="discriminator_composed_loss", simple_value=composed_dis_loss)
+                writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
+                writer.flush()
+                summary = tf.Summary()
+            loss += (step_loss + dis_loss) / FLAGS.steps_per_checkpoint
+        else:
+            print("Skipping training of discriminator because current step is too small:", current_step)
+            loss += step_loss / FLAGS.steps_per_checkpoint
+
+        if current_step >= FLAGS.steps_start_train_generator_composed:
+            print("Training generator with composed false data")
+            with g_train.as_default():
+                _reset_tf_graph_random_seed()
+
+                new_enc_in = composed_disc_in
+                new_dec_in = [
+                    _pad_decode_in(line[:line.index(data_utils.EOS_ID)], 100) if data_utils.EOS_ID in line else line
+                    for line in composed_decoder_out
+                ]
+
+                bucket_id_to_use = len(_buckets) - 1
+
+                new_encoder_inputs, \
+                new_decoder_inputs, \
+                new_target_weights, \
+                new_original_encoder_inputs, \
+                new_original_decoder_inputs = train_model.get_batch(
+                    {bucket_id_to_use: [(new_enc_in[i], new_dec_in[i]) for i in range(train_model.batch_size)]}, bucket_id_to_use
+                )
+                _, new_step_loss, _ = train_model.step(train_sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id_to_use,
+                                                   False)
+                print("Generator composed loss:", new_step_loss)
+
+        else:
+            print("Skipping training of generator with composed data because current step is too small:", current_step)
 
         with g_train.as_default():
-            _reset_tf_graph_random_seed()
-
-            summary.value.add(tag="discriminator_composed_loss", simple_value=composed_dis_loss)
-            writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
-            writer.flush()
-            summary = tf.Summary()
-
-        print("Training generator with composed false data")
-        with g_train.as_default():
-            _reset_tf_graph_random_seed()
-
-            new_enc_in = composed_disc_in
-            new_dec_in = [
-                _pad_decode_in(line[:line.index(data_utils.EOS_ID)], 100) if data_utils.EOS_ID in line else line
-                for line in composed_decoder_out
-            ]
-
-            bucket_id_to_use = len(_buckets) - 1
-
-            new_encoder_inputs, \
-            new_decoder_inputs, \
-            new_target_weights, \
-            new_original_encoder_inputs, \
-            new_original_decoder_inputs = train_model.get_batch(
-                {bucket_id_to_use: [(new_enc_in[i], new_dec_in[i]) for i in range(train_model.batch_size)]}, bucket_id_to_use
-            )
-            _, new_step_loss, _ = train_model.step(train_sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id_to_use,
-                                               False)
-            print("Generator composed loss:", new_step_loss)
             global_step = train_model.global_step.eval(session=train_sess)
 
             summary.value.add(tag="generator_composed_loss", simple_value=new_step_loss)
@@ -371,7 +389,6 @@ def train():
             summary = tf.Summary()
 
         step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
-        loss += (step_loss + dis_loss) / FLAGS.steps_per_checkpoint
         current_step += 1
 
         # Once in a while, we save checkpoint, print statistics, and run evals.
