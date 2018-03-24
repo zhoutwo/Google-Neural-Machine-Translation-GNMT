@@ -259,6 +259,7 @@ def train():
             original_decoder_inputs = train_model.get_batch(train_set, bucket_id)
             _, step_loss, _ = train_model.step(train_sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
 
+            print("Generator normal loss:", step_loss)
             summary.value.add(tag="generator_normal_loss", simple_value=step_loss)
             # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
 
@@ -303,7 +304,7 @@ def train():
         # disc_in = np.zeros(shape=(train_model.batch_size,)+)
         disc_out = np.ones(shape=(train_model.batch_size, 1))
         dis_loss = dis_model.train_on_batch(disc_in, disc_out)
-        print("Discriminator loss:", dis_loss)
+        print("Discriminator truth loss:", dis_loss)
 
         with g_train.as_default():
             _reset_tf_graph_random_seed()
@@ -330,7 +331,7 @@ def train():
         composed_decoder_out = np.array(composed_decoder_out)
         composed_disc_out = np.zeros((len(composed_disc_in_enc),))
         composed_dis_loss = dis_model.train_on_batch(composed_disc_in, composed_disc_out)
-        print("Discriminator loss:", composed_dis_loss)
+        print("Discriminator composed loss:", composed_dis_loss)
 
         with g_train.as_default():
             _reset_tf_graph_random_seed()
@@ -361,7 +362,7 @@ def train():
             )
             _, new_step_loss, _ = train_model.step(train_sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id_to_use,
                                                False)
-            print("New step loss:", new_step_loss)
+            print("Generator composed loss:", new_step_loss)
             global_step = train_model.global_step.eval(session=train_sess)
 
             summary.value.add(tag="generator_composed_loss", simple_value=new_step_loss)
