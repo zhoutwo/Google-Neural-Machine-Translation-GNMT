@@ -156,6 +156,7 @@ def _reset_tf_graph_random_seed():
 
 def _convert_outputs(outputs, rev_vocab):
     # If there is an EOS symbol in outputs, cut them at that point.
+    outputs = list(outputs)
     if data_utils.EOS_ID in outputs:
         print("EOS_ID detected in outputs, index:", outputs.index(data_utils.EOS_ID))
         outputs = outputs[:outputs.index(data_utils.EOS_ID)]
@@ -171,9 +172,12 @@ def train():
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.fr_vocab_size)
 
     # Load vocabularies.
+    en_vocab_path = os.path.join(FLAGS.data_dir,
+                                 "vocab%d.en" % FLAGS.en_vocab_size)
     fr_vocab_path = os.path.join(FLAGS.data_dir,
                                  "vocab%d.fr" % FLAGS.fr_vocab_size)
-    _, rev_fr_vocab = data_utils.initialize_vocabulary(fr_vocab_path)
+    en_vocab, rev_en_vocab = data_utils.initialize_vocabulary(en_vocab_path)
+    fr_vocab, rev_fr_vocab = data_utils.initialize_vocabulary(fr_vocab_path)
 
     config = tf.ConfigProto(log_device_placement=False,
                             allow_soft_placement=True)
