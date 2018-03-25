@@ -416,7 +416,7 @@ def train():
                 _reset_tf_graph_random_seed()
 
                 save_checkpoint(train_sess, train_model)
-                dis_model.save(os.path.join(FLAGS.train_dir, str(train_model.global_step.eval(session=train_sess)) + '.h5'))
+            dis_model.save(os.path.join(FLAGS.train_dir, str(train_model.global_step.eval(session=train_sess)) + '.h5'))
             # Update eval_model with new weights
             with tf.device("/cpu:0"):
                 eval_model = create_or_load_model(eval_sess, eval_model)
