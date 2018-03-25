@@ -802,10 +802,15 @@ def embedding_attention_seq2seq(encoder_inputs,
         scope or "embedding_attention_seq2seq", dtype=dtype) as scope:
         dtype = scope.dtype
         # Encoder.
-        with tf.device('/device:GPU:' + str(num_gpus-3)):
-            single_cell_1 = LSTMCell(embedding_size / 2)
-        with tf.device('/device:GPU:' + str(num_gpus-2)):
-            single_cell_2 = LSTMCell(embedding_size / 2)
+        if num_gpus:
+            with tf.device('/device:GPU:' + str(num_gpus-3)):
+                single_cell_1 = LSTMCell(embedding_size / 2)
+            with tf.device('/device:GPU:' + str(num_gpus-2)):
+                single_cell_2 = LSTMCell(embedding_size / 2)
+        else:
+            with tf.device('/cpu:0'):
+                single_cell_1 = LSTMCell(embedding_size / 2)
+                single_cell_2 = LSTMCell(embedding_size / 2)
 
         encoder_fw_cell = EmbeddingWrapper(single_cell_1, embedding_classes=num_encoder_symbols,
                                                     embedding_size=embedding_size / 2)
@@ -839,19 +844,34 @@ def embedding_attention_seq2seq(encoder_inputs,
             output_size = num_decoder_symbols
 
         if isinstance(feed_previous, bool):
-            with tf.device('/device:GPU:' + str(num_gpus-1)):
-                return embedding_attention_decoder(
-                    decoder_inputs,
-                    encoder_state,
-                    attention_states,
-                    cell,
-                    num_decoder_symbols,
-                    embedding_size,
-                    num_heads=num_heads,
-                    output_size=output_size,
-                    output_projection=output_projection,
-                    feed_previous=feed_previous,
-                    initial_state_attention=initial_state_attention)
+            if num_gpus:
+                with tf.device('/device:GPU:' + str(num_gpus-1)):
+                    return embedding_attention_decoder(
+                        decoder_inputs,
+                        encoder_state,
+                        attention_states,
+                        cell,
+                        num_decoder_symbols,
+                        embedding_size,
+                        num_heads=num_heads,
+                        output_size=output_size,
+                        output_projection=output_projection,
+                        feed_previous=feed_previous,
+                        initial_state_attention=initial_state_attention)
+            else:
+                with tf.device('/cpu:0'):
+                    return embedding_attention_decoder(
+                        decoder_inputs,
+                        encoder_state,
+                        attention_states,
+                        cell,
+                        num_decoder_symbols,
+                        embedding_size,
+                        num_heads=num_heads,
+                        output_size=output_size,
+                        output_projection=output_projection,
+                        feed_previous=feed_previous,
+                        initial_state_attention=initial_state_attention)
 
         # If feed_previous is a Tensor, we construct 2 graphs and use cond.
         def decoder(feed_previous_bool):
@@ -876,10 +896,16 @@ def embedding_attention_seq2seq(encoder_inputs,
                     state_list = nest.flatten(state)
                 return outputs + state_list
 
-        with tf.device('/device:GPU:' + str(num_gpus - 1)):
-            outputs_and_state = control_flow_ops.cond(pred=feed_previous,
-                                                      fn1=lambda: decoder(True),
-                                                      fn2=lambda: decoder(False))
+        if num_gpus:
+            with tf.device('/device:GPU:' + str(num_gpus - 1)):
+                outputs_and_state = control_flow_ops.cond(pred=feed_previous,
+                                                          fn1=lambda: decoder(True),
+                                                          fn2=lambda: decoder(False))
+        else:
+            with tf.device('/cpu:0'):
+                outputs_and_state = control_flow_ops.cond(pred=feed_previous,
+                                                          fn1=lambda: decoder(True),
+                                                          fn2=lambda: decoder(False))
         outputs_len = len(decoder_inputs)  # Outputs length same as decoder inputs.
         state_list = outputs_and_state[outputs_len:]
         state = state_list[0]
