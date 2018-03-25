@@ -186,7 +186,7 @@ def train():
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
         model = create_model(sess, False)
-        model = create_or_load_model(model, sess, True)
+        model = create_or_load_model(sess, model, True)
 
         # Read data into buckets and compute their sizes.
         print("Reading development and training data (limit: %d)."
