@@ -34,6 +34,7 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5.0,
                           "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
+tf.app.flags.DEFINE_integer("seed", None, "Random seed to use.")
 tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 4, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("num_gpus", 0, "Number of GPUs available.")
@@ -41,6 +42,7 @@ tf.app.flags.DEFINE_integer("en_vocab_size", 40000, "English vocabulary size.")
 tf.app.flags.DEFINE_integer("fr_vocab_size", 40000, "French vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", "/tmp", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "/tmp", "Training directory.")
+tf.app.flags.DEFINE_string("log_dir", "/tmp", "TensorBoard log directory.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 0,
                             "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
@@ -99,7 +101,7 @@ def read_data(source_path, target_path, max_size=None):
     return data_set
 
 
-def create_model(session, forward_only):
+def create_model(session, forward_only, allow_gpu=True):
     """Create translation model and initialize or load parameters in session."""
     dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
     model = seq2seq_model.Seq2SeqModel(
@@ -108,22 +110,57 @@ def create_model(session, forward_only):
         _buckets,
         FLAGS.size,
         FLAGS.num_layers,
-        FLAGS.num_gpus,
+        FLAGS.num_gpus if allow_gpu else 0,
         FLAGS.max_gradient_norm,
         FLAGS.batch_size,
         FLAGS.learning_rate,
         FLAGS.learning_rate_decay_factor,
         forward_only=forward_only,
         dtype=dtype)
+    return model
+
+
+def create_or_load_model(session, model, initial_save=False):
     ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
     if ckpt:
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
         model.saver.restore(session, ckpt.model_checkpoint_path)
     else:
         print("Created model with fresh parameters.")
-        session.run(tf.initialize_all_variables())
+        session.run(tf.global_variables_initializer())
+        if initial_save:
+            save_checkpoint(session, model)
     return model
 
+def save_checkpoint(sess, model):
+    checkpoint_path = os.path.join(FLAGS.train_dir, "translate.ckpt")
+    model.saver.save(sess, checkpoint_path, global_step=model.global_step)
+
+
+def _get_outputs(ls):
+    # This is a greedy decoder - outputs are just argmaxes of eval_output_logits.
+    o = [int(np.argmax(l, axis=1)) for l in ls]
+    # If there is an EOS symbol in outputs, cut them at that point.
+    if data_utils.EOS_ID in o:
+        o = o[:o.index(data_utils.EOS_ID)]
+    return o
+
+def _pad_decode_in(di, s):
+    result = np.ones(shape=(s,)) * data_utils.PAD_ID
+    result[:len(di)] = di[:]
+    return result
+
+def _reset_tf_graph_random_seed():
+    if FLAGS.seed is not None:
+        tf.set_random_seed(FLAGS.seed)
+
+def _convert_outputs(outputs, rev_vocab):
+    # If there is an EOS symbol in outputs, cut them at that point.
+    outputs = list(outputs)
+    if data_utils.EOS_ID in outputs:
+        print("EOS_ID detected in outputs, index:", outputs.index(data_utils.EOS_ID))
+        outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+    return " ".join([tf.compat.as_str(rev_vocab[output]) for output in outputs])
 
 def train():
     """Train a en->fr translation model using WMT data."""
@@ -132,11 +169,20 @@ def train():
     en_train, fr_train, en_dev, fr_dev, _, _ = data_utils.prepare_wmt_data(
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.fr_vocab_size)
 
-    config = tf.ConfigProto(log_device_placement=True,
+    # Load vocabularies.
+    en_vocab_path = os.path.join(FLAGS.data_dir,
+                                 "vocab%d.en" % FLAGS.en_vocab_size)
+    fr_vocab_path = os.path.join(FLAGS.data_dir,
+                                 "vocab%d.fr" % FLAGS.fr_vocab_size)
+    en_vocab, rev_en_vocab = data_utils.initialize_vocabulary(en_vocab_path)
+    fr_vocab, rev_fr_vocab = data_utils.initialize_vocabulary(fr_vocab_path)
+
+    config = tf.ConfigProto(log_device_placement=False,
                             allow_soft_placement=True)
     config.gpu_options.allow_growth = True
 
     with tf.Session(config=config) as sess:
+        _reset_tf_graph_random_seed()
         # Create model.
         print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
         model = create_model(sess, False)
@@ -159,6 +205,8 @@ def train():
         step_time, loss = 0.0, 0.0
         current_step = 0
         previous_losses = []
+        summary = tf.Summary()
+        writer = tf.summary.FileWriter(logdir=FLAGS.log_dir, graph=sess.graph)
         while True:
             # Choose a bucket according to data distribution. We pick a random number
             # in [0, 1] and use the corresponding interval in train_buckets_scale.
@@ -173,6 +221,7 @@ def train():
             _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
                                          target_weights, bucket_id, False)
             step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
+            summary.value.add(tag="generator_normal_loss", simple_value=step_loss)
             loss += step_loss / FLAGS.steps_per_checkpoint
             current_step += 1
 
@@ -183,6 +232,9 @@ def train():
                 print("global step %d learning rate %.4f step-time %.2f perplexity "
                       "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
                                 step_time, perplexity))
+                summary.value.add(tag="learn_rate", simple_value=model.learning_rate.eval())
+                summary.value.add(tag="train_step_time", simple_value=step_time)
+                summary.value.add(tag="train_perplex", simple_value=perplexity)
                 # Decrease learning rate if no improvement was seen over last 3 times.
                 if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
                     sess.run(model.learning_rate_decay_op)
@@ -203,7 +255,11 @@ def train():
                     eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float(
                         "inf")
                     print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
+                    summary.value.add(tag="eval_perplex_bucket_" + str(bucket_id), simple_value=eval_ppx)
                 sys.stdout.flush()
+            writer.add_summary(summary, global_step=model.global_step.eval(session=sess))
+            writer.flush()
+            summary = tf.Summary()
 
 
 def decode():
@@ -302,6 +358,10 @@ def self_test():
 
 
 def main(_):
+    if FLAGS.seed is not None:
+        random.seed(FLAGS.seed)
+        np.random.seed(FLAGS.seed)
+
     with tf.device('/cpu:0'):
         if FLAGS.self_test:
             self_test()
