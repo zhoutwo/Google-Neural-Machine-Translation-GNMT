@@ -808,19 +808,15 @@ def embedding_attention_seq2seq(encoder_inputs,
             with tf.device('/device:GPU:' + str(num_gpus-2)):
                 single_cell_2 = LSTMCell(embedding_size / 2)
         else:
-            single_cell_1 = LSTMCell(embedding_size / 2)
-            single_cell_2 = LSTMCell(embedding_size / 2)
+            with tf.device('/cpu:0'):
+                single_cell_1 = LSTMCell(embedding_size / 2)
+                single_cell_2 = LSTMCell(embedding_size / 2)
 
         encoder_fw_cell = EmbeddingWrapper(single_cell_1, embedding_classes=num_encoder_symbols,
                                                     embedding_size=embedding_size / 2)
         encoder_bw_cell = EmbeddingWrapper(single_cell_2, embedding_classes=num_encoder_symbols,
                                                     embedding_size=embedding_size / 2)
-        if num_gpus:
-            with tf.device('/device:GPU:3'):
-                outputs, _, _ = static_bidirectional_rnn(encoder_fw_cell, encoder_bw_cell, encoder_inputs, dtype=dtype)
-        else:
-            with tf.device('/cpu:0'):
-                outputs, _, _ = static_bidirectional_rnn(encoder_fw_cell, encoder_bw_cell, encoder_inputs, dtype=dtype)
+        outputs, _, _ = static_bidirectional_rnn(encoder_fw_cell, encoder_bw_cell, encoder_inputs, dtype=dtype)
 
         list_of_cell = []
         for layer in range(num_layers):
@@ -831,26 +827,15 @@ def embedding_attention_seq2seq(encoder_inputs,
                 with tf.device('/device:GPU:' + str(layer % (num_gpus-3))):
                     list_of_cell.append(tf.nn.rnn_cell.LSTMCell(embedding_size))
 
-        cell2 = Stack_Residual_RNNCell.Stack_Residual_RNNCell(list_of_cell, num_gpus=num_gpus)
+        cell2 = Stack_Residual_RNNCell.Stack_Residual_RNNCell(list_of_cell)
 
-        if num_gpus:
-            with tf.device('/device:GPU:5'):
-                encoder_outputs, encoder_state = static_rnn(
-                    cell=cell2, inputs=outputs, dtype=dtype)
+        encoder_outputs, encoder_state = static_rnn(
+            cell=cell2, inputs=outputs, dtype=dtype)
 
-            # First calculate a concatenation of encoder outputs to put attention on.
-            with tf.device('/device:GPU:2'):
-                top_states = [array_ops.reshape(tensor=e, shape=[-1, 1, cell.output_size])
-                              for e in encoder_outputs]
-                attention_states = array_ops.concat(axis=1, values=top_states)
-        else:
-            with tf.device('/cpu:0'):
-                encoder_outputs, encoder_state = static_rnn(
-                    cell=cell2, inputs=outputs, dtype=dtype)
-
-                top_states = [array_ops.reshape(tensor=e, shape=[-1, 1, cell.output_size])
-                              for e in encoder_outputs]
-                attention_states = array_ops.concat(axis=1, values=top_states)
+        # First calculate a concatenation of encoder outputs to put attention on.
+        top_states = [array_ops.reshape(tensor=e, shape=[-1, 1, cell.output_size])
+                      for e in encoder_outputs]
+        attention_states = array_ops.concat(axis=1, values=top_states)
 
         # Decoder.
         output_size = None
@@ -874,18 +859,19 @@ def embedding_attention_seq2seq(encoder_inputs,
                         feed_previous=feed_previous,
                         initial_state_attention=initial_state_attention)
             else:
-                return embedding_attention_decoder(
-                    decoder_inputs,
-                    encoder_state,
-                    attention_states,
-                    cell,
-                    num_decoder_symbols,
-                    embedding_size,
-                    num_heads=num_heads,
-                    output_size=output_size,
-                    output_projection=output_projection,
-                    feed_previous=feed_previous,
-                    initial_state_attention=initial_state_attention)
+                with tf.device('/cpu:0'):
+                    return embedding_attention_decoder(
+                        decoder_inputs,
+                        encoder_state,
+                        attention_states,
+                        cell,
+                        num_decoder_symbols,
+                        embedding_size,
+                        num_heads=num_heads,
+                        output_size=output_size,
+                        output_projection=output_projection,
+                        feed_previous=feed_previous,
+                        initial_state_attention=initial_state_attention)
 
         # If feed_previous is a Tensor, we construct 2 graphs and use cond.
         def decoder(feed_previous_bool):
@@ -916,9 +902,10 @@ def embedding_attention_seq2seq(encoder_inputs,
                                                           fn1=lambda: decoder(True),
                                                           fn2=lambda: decoder(False))
         else:
-            outputs_and_state = control_flow_ops.cond(pred=feed_previous,
-                                                      fn1=lambda: decoder(True),
-                                                      fn2=lambda: decoder(False))
+            with tf.device('/cpu:0'):
+                outputs_and_state = control_flow_ops.cond(pred=feed_previous,
+                                                          fn1=lambda: decoder(True),
+                                                          fn2=lambda: decoder(False))
         outputs_len = len(decoder_inputs)  # Outputs length same as decoder inputs.
         state_list = outputs_and_state[outputs_len:]
         state = state_list[0]
