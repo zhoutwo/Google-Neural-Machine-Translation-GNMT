@@ -376,14 +376,13 @@ def train():
                 _, new_step_loss, _ = train_model.step(train_sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id_to_use,
                                                    False)
                 print("Generator composed loss:", new_step_loss)
+                global_step = train_model.global_step.eval(session=train_sess)
+                summary.value.add(tag="generator_composed_loss", simple_value=new_step_loss)
 
         else:
             print("Skipping training of generator with composed data because current step is too small:", current_step)
 
         with g_train.as_default():
-            global_step = train_model.global_step.eval(session=train_sess)
-
-            summary.value.add(tag="generator_composed_loss", simple_value=new_step_loss)
             writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
             writer.flush()
             summary = tf.Summary()
