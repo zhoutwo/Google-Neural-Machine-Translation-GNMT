@@ -383,6 +383,7 @@ def train():
             print("Skipping training of generator with composed data because current step is too small:", current_step)
 
         with g_train.as_default():
+            global_step = train_model.global_step.eval(session=train_sess)
             writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
             writer.flush()
             summary = tf.Summary()
