@@ -166,6 +166,69 @@ def _convert_outputs(outputs, rev_vocab):
         outputs = outputs[:outputs.index(data_utils.EOS_ID)]
     return " ".join([tf.compat.as_str(rev_vocab[output]) for output in outputs])
 
+
+def _evaluate(sess, model, dis_model, sentence, en_vocab):
+    import discriminator
+    # Get token-ids for the input sentence.
+    token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), en_vocab)
+    # Which bucket does it belong to?
+    bucket_id = min([b for b in range(len(_buckets))
+                     if _buckets[b][0] > len(token_ids)])
+    # Get a 1-element batch to feed the sentence to the model.
+    encoder_inputs, \
+    decoder_inputs, \
+    target_weights, \
+    original_encoder_inputs, \
+    original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
+    max_retries = 10
+    threshold = 0.5
+    for i in range(max_retries):
+        # Get output logits for the sentence.
+        _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                         target_weights, bucket_id, True)
+        # This is a greedy decoder - outputs are just argmaxes of output_logits.
+        outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+        # If there is an EOS symbol in outputs, cut them at that point.
+        if data_utils.EOS_ID in outputs:
+            outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+
+        assert model.batch_size == 1
+
+        # From num_encoder_tokens x batch_size to batch_size x num_encoder_tokens
+        encoder_inputs_transposed = [
+            [row[i] for row in encoder_inputs]
+            for i in range(model.batch_size)
+        ]
+        encoder_inputs_transposed_original_order = [
+            list(reversed(r)) for r in encoder_inputs_transposed
+        ]
+        # From num_decoder_tokens x batch_size to batch_size x num_decoder_tokens
+        # decoder_inputs_transposed = [
+        #     [row[i] for row in decoder_inputs]
+        #     for i in range(model.batch_size)
+        # ]
+        output_token_ids = outputs
+        disc_in = np.array(
+            [discriminator.get_disc_input(encoder_inputs_transposed_original_order[0],
+                                          output_token_ids)]
+        )
+        disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
+        disc_out = disc_out[0]
+        if disc_out > threshold:
+            break
+        else:
+            bucket_id = len(_buckets) - 1
+            new_enc_in = disc_in
+
+            encoder_inputs, \
+            decoder_inputs, \
+            target_weights, \
+            new_original_encoder_inputs, \
+            new_original_decoder_inputs = model.get_batch(
+                {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
+            )
+    return outputs
+
 def train():
     """Train a en->fr translation model using WMT data."""
     # Importing after random seed is set
@@ -478,66 +541,7 @@ def decode():
                         line = input_file.readline()
                         while line:
                             try:
-                                # Get token-ids for the input sentence.
-                                token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(line), en_vocab)
-                                # Which bucket does it belong to?
-                                bucket_id = min([b for b in range(len(_buckets))
-                                                 if _buckets[b][0] >= len(token_ids)])
-                                # Get a 1-element batch to feed the sentence to the model.
-                                encoder_inputs, \
-                                decoder_inputs, \
-                                target_weights, \
-                                original_encoder_inputs, \
-                                original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
-
-                                max_retries = 10
-                                threshold = 0.5
-                                for i in range(max_retries):
-                                    # Get output logits for the sentence.
-                                    _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                                                     target_weights, bucket_id, True)
-                                    # This is a greedy decoder - outputs are just argmaxes of output_logits.
-                                    outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-                                    # If there is an EOS symbol in outputs, cut them at that point.
-                                    if data_utils.EOS_ID in outputs:
-                                        outputs = outputs[:outputs.index(data_utils.EOS_ID)]
-
-                                    assert model.batch_size == 1
-
-                                    # From num_encoder_tokens x batch_size to batch_size x num_encoder_tokens
-                                    encoder_inputs_transposed = [
-                                        [row[i] for row in encoder_inputs]
-                                        for i in range(model.batch_size)
-                                    ]
-                                    encoder_inputs_transposed_original_order = [
-                                        list(reversed(r)) for r in encoder_inputs_transposed
-                                    ]
-                                    # From num_decoder_tokens x batch_size to batch_size x num_decoder_tokens
-                                    # decoder_inputs_transposed = [
-                                    #     [row[i] for row in decoder_inputs]
-                                    #     for i in range(model.batch_size)
-                                    # ]
-                                    output_token_ids = outputs
-                                    disc_in = np.array(
-                                        [discriminator.get_disc_input(encoder_inputs_transposed_original_order[0],
-                                                                      output_token_ids)]
-                                    )
-                                    disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
-                                    disc_out = disc_out[0]
-                                    if disc_out > threshold:
-                                        break
-                                    else:
-                                        bucket_id = len(_buckets) - 1
-                                        new_enc_in = disc_in
-
-                                        encoder_inputs, \
-                                        decoder_inputs, \
-                                        target_weights, \
-                                        new_original_encoder_inputs, \
-                                        new_original_decoder_inputs = model.get_batch(
-                                            {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
-                                        )
-
+                                outputs = _evaluate(sess, model, dis_model, line, en_vocab)
                                 output_file.write(_convert_outputs(outputs, rev_fr_vocab) + "\n")
                                 actual_input_file.write(line)
                             except Exception as e:
@@ -551,64 +555,7 @@ def decode():
             sentence = sys.stdin.readline()
             while sentence:
                 try:
-                    # Get token-ids for the input sentence.
-                    token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), en_vocab)
-                    # Which bucket does it belong to?
-                    bucket_id = min([b for b in range(len(_buckets))
-                                     if _buckets[b][0] > len(token_ids)])
-                    # Get a 1-element batch to feed the sentence to the model.
-                    encoder_inputs, \
-                    decoder_inputs, \
-                    target_weights, \
-                    original_encoder_inputs, \
-                    original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
-                    max_retries = 10
-                    threshold = 0.5
-                    for i in range(max_retries):
-                        # Get output logits for the sentence.
-                        _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                                         target_weights, bucket_id, True)
-                        # This is a greedy decoder - outputs are just argmaxes of output_logits.
-                        outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-                        # If there is an EOS symbol in outputs, cut them at that point.
-                        if data_utils.EOS_ID in outputs:
-                            outputs = outputs[:outputs.index(data_utils.EOS_ID)]
-
-                        assert model.batch_size == 1
-
-                        # From num_encoder_tokens x batch_size to batch_size x num_encoder_tokens
-                        encoder_inputs_transposed = [
-                            [row[i] for row in encoder_inputs]
-                            for i in range(model.batch_size)
-                        ]
-                        encoder_inputs_transposed_original_order = [
-                            list(reversed(r)) for r in encoder_inputs_transposed
-                        ]
-                        # From num_decoder_tokens x batch_size to batch_size x num_decoder_tokens
-                        # decoder_inputs_transposed = [
-                        #     [row[i] for row in decoder_inputs]
-                        #     for i in range(model.batch_size)
-                        # ]
-                        output_token_ids = outputs
-                        disc_in = np.array(
-                            [discriminator.get_disc_input(encoder_inputs_transposed_original_order[0],
-                                                          output_token_ids)]
-                        )
-                        disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
-                        disc_out = disc_out[0]
-                        if disc_out > threshold:
-                            break
-                        else:
-                            bucket_id = len(_buckets) - 1
-                            new_enc_in = disc_in
-
-                            encoder_inputs, \
-                            decoder_inputs, \
-                            target_weights, \
-                            new_original_encoder_inputs, \
-                            new_original_decoder_inputs = model.get_batch(
-                                {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
-                            )
+                    outputs = _evaluate(sess, model, dis_model, sentence, en_vocab)
                     # Print out French sentence corresponding to outputs.
                     print(_convert_outputs(outputs, rev_fr_vocab))
                     print("> ", end="")
