@@ -6,7 +6,7 @@ import glob
 import numpy as np
 import tensorflow as tf
 import data_utils
-from keras.layers import Input, LSTM, Dense, Embedding
+from keras.layers import Input, LSTM, Dense, Embedding, Concatenate, Dropout
 from keras.models import Model, load_model
 
 
@@ -26,25 +26,32 @@ def create_model(max_encoder_seq_length=200, num_layers=1, num_gpus=0, num_dict_
             print("Reading discriminator model from saved model:", checkpoint_folder + str(max) + '.h5')
             return load_model(checkpoint_folder + str(max) + '.h5')
 
-    inputs = Input(shape=(max_encoder_seq_length,))
+    inputs = Input(shape=(max_encoder_seq_length,), name='discriminator_Input')
     with tf.device('/cpu:0'):
-        discriminator = Embedding(num_dict_size, latent_dim, name='discriminator_embedding')(inputs)
+        discriminator = Embedding(num_dict_size, latent_dim, name='discriminator_Embedding')(inputs)
 
     if not num_gpus:
         with tf.device('/cpu:0'):
             for i in range(num_layers - 1):
                 discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(i), return_sequences=True)(discriminator)
-            discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1))(discriminator)
+            discriminator, d_h, d_c = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1), return_state=True)(discriminator)
     else:
         for i in range(num_layers - 1):
-            with tf.device('/device:GPU:' + str((i+1) % num_gpus)):
+            with tf.device('/device:GPU:' + str(i % num_gpus)):
                 discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(i), return_sequences=True)(discriminator)
         with tf.device('/device:GPU:' + str(num_layers % num_gpus)):
-            discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1))(discriminator)
-    output = Dense(1, activation='sigmoid')(discriminator)
+            discriminator, d_h, d_c = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1), return_state=True)(discriminator)
+    output = Concatenate(name='discriminator_Concat')([d_h, d_c])
+    output = Dense(int(latent_dim), activation='relu', name='discriminator_FC1')(output)
+    output = Dropout(0.2)(output)
+    output = Dense(int(latent_dim / 2), activation='relu', name='discriminator_FC2')(output)
+    output = Dropout(0.2)(output)
+    output = Dense(int(latent_dim / 8), activation='relu', name='discriminator_FC3')(output)
+    output = Dropout(0.2)(output)
+    output = Dense(2, activation='softmax', name='discriminator_Classification')(output)
 
-    model = Model(inputs, output)
-    model.compile(optimizer='adam', loss='mse')
+    model = Model(inputs=inputs, outputs=output)
+    model.compile(optimizer='adam', loss='binary_crossentropy')
     model.summary()
 
     return model
@@ -80,9 +87,10 @@ def get_disc_input(encoder_in, decoder_in):
     if not data_utils.EOS_ID in decoder_in:
         print("Warning: EOS_ID NOT in decoder input")
         if data_utils.PAD_ID in decoder_in:
-            part2 = decoder_in[:decoder_in.index(data_utils.PAD_ID)]
+            part2 = decoder_in[:decoder_in.index(data_utils.PAD_ID+1)]
+            part2[-1] = data_utils.EOS_ID
         else:
-            part2 = decoder_in[:]
+            part2 = decoder_in[:] + [data_utils.EOS_ID]
     else:
         part2 = decoder_in[:decoder_in.index(data_utils.EOS_ID)+1] # Include the EOS token
 
@@ -92,6 +100,7 @@ def get_disc_input(encoder_in, decoder_in):
     if data_utils.GO_ID in decoder_in:
         result[len(part1):len(part1) + len(part2)] = part2[:]
     else:
+        print("Warning: GO_ID NOT in decoder input")
         result[len(part1)] = data_utils.GO_ID
         result[len(part1) + 1:len(part1) + 1 + len(part2)] = part2[:]
         result[len(part1) + 1 + len(part2)] = data_utils.EOS_ID
