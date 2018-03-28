@@ -64,7 +64,7 @@ FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(15, 10), (180, 50)]
+_buckets = [(15, 10), (25, 20), (45, 30), (90, 40), (180, 50)]
 
 
 def read_data(source_path, target_path, max_size=None):
@@ -277,7 +277,6 @@ def train():
         writer = tf.summary.FileWriter(logdir=FLAGS.log_dir, graph=g_train)
 
     with g_eval.as_default():
-        _reset_tf_graph_random_seed()
 
         print("Creating model in the eval session")
         # Create model.
@@ -317,8 +316,6 @@ def train():
         # Normal training step: orig. input
         print("Trainng generator with normal data")
         with g_train.as_default():
-            _reset_tf_graph_random_seed()
-
             encoder_inputs, \
             decoder_inputs, \
             target_weights, \
@@ -331,8 +328,6 @@ def train():
             # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
 
         with g_eval.as_default():
-            _reset_tf_graph_random_seed()
-
             original_encoder_inputs_in_original_order = [(list(reversed(oe)), []) for oe in original_encoder_inputs]
             eval_encoder_inputs, eval_decoder_inputs, eval_target_weights, _, _ = eval_model.get_batch(
                 {bucket_id: original_encoder_inputs_in_original_order}, bucket_id
@@ -416,8 +411,6 @@ def train():
             print("Discriminator loss:", dis_loss)
 
             with g_train.as_default():
-                _reset_tf_graph_random_seed()
-
                 summary.value.add(tag="discriminator_loss", simple_value=dis_loss)
                 # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
 
@@ -440,8 +433,6 @@ def train():
         if current_step >= FLAGS.steps_start_train_generator_composed:
             print("Training generator with composed false data")
             with g_train.as_default():
-                _reset_tf_graph_random_seed()
-
                 new_enc_in = composed_disc_in
                 new_dec_in = [
                     _pad_decode_in(line[:line.index(data_utils.EOS_ID)], 100) if data_utils.EOS_ID in line else line
@@ -481,8 +472,6 @@ def train():
             perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
 
             with g_train.as_default():
-                _reset_tf_graph_random_seed()
-
                 print("global generator step %d learning rate %.4f step-time %.2f perplexity "
                       "%.2f" % (global_step, train_model.learning_rate.eval(session=train_sess),
                                 step_time, perplexity))
@@ -497,8 +486,6 @@ def train():
             previous_losses.append(loss)
             # Save checkpoint and zero timer and loss.
             with g_train.as_default():
-                _reset_tf_graph_random_seed()
-
                 save_checkpoint(train_sess, train_model)
             dis_model.save(os.path.join(FLAGS.train_dir, str(train_model.global_step.eval(session=train_sess)) + '.h5'))
             # Update eval_model with new weights
@@ -507,8 +494,6 @@ def train():
             step_time, loss = 0.0, 0.0
             # Run evals on development set and print their perplexity.
             with g_train.as_default():
-                _reset_tf_graph_random_seed()
-
                 for bucket_id in range(len(_buckets)):
                     if len(dev_set[bucket_id]) == 0:
                         print("  eval: empty bucket %d" % (bucket_id))
