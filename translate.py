@@ -214,7 +214,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab):
         )
         disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
         disc_out = disc_out[0]
-        if disc_out > threshold:
+        if disc_out[0] > threshold:
             break
         else:
             bucket_id = len(_buckets) - 1
@@ -368,7 +368,8 @@ def train():
             [discriminator.get_disc_input(encoder_inputs_transposed_original_order[i], decoder_inputs_transposed[i])
              for i in range(train_model.batch_size)]
         )
-        disc_out = np.ones(shape=(train_model.batch_size, 1))
+        # disc_out = np.ones(shape=(train_model.batch_size, 2))
+        # disc_out[:, 1] = 0
 
         # Discriminator composed data
         eval_output_tokens = [_pad_decode_in(_get_outputs(ls), 100) for ls in eval_output_logits_transposed]
@@ -387,30 +388,50 @@ def train():
              for i in range(len(composed_disc_in_enc))]
         )
         composed_decoder_out = np.array(composed_decoder_out)
-        composed_disc_out = np.zeros((len(composed_disc_in_enc),))
+        # composed_disc_out = np.ones((len(composed_disc_in_enc), 2))
+        # composed_disc_out[:, 0] = 0
+
+        if len(composed_disc_in_enc) < train_model.batch_size:
+            interleaved = np.zeros((train_model.batch_size + composed_disc_in_enc, len(disc_in[0])), dtype=int)
+            interleaved_scores = np.zeros((train_model.batch_size + composed_disc_in_enc, 2))
+            for i in range(len(composed_disc_in_enc)):
+                interleaved[2 * i, :] = disc_in[i, :]
+                interleaved_scores[2 * i, 0] = 1
+                interleaved[2 * i + 1, :] = composed_disc_in[i, :]
+                interleaved_scores[2 * i + 1, 1] = 1
+            interleaved[2 * len(composed_disc_in_enc):, :] = disc_in[len(composed_disc_in_enc), :]
+            interleaved_scores[2 * len(composed_disc_in_enc):, 0] = 1
+        else:
+            interleaved = np.zeros((train_model.batch_size * 2, len(disc_in[0])), dtype=int)
+            interleaved_scores = np.zeros((train_model.batch_size * 2, 2))
+            for i in range(train_model.batch_size):
+                interleaved[2 * i, :] = disc_in[i, :]
+                interleaved_scores[2 * i, 0] = 1
+                interleaved[2 * i + 1, :] = composed_disc_in[i, :]
+                interleaved_scores[2 * i + 1, 1] = 1
 
         if current_step >= FLAGS.steps_start_train_discriminator:
-            print("Training discriminator with truth data")
-            dis_loss = dis_model.train_on_batch(disc_in, disc_out)
-            print("Discriminator truth loss:", dis_loss)
+            print("Training discriminator")
+            dis_loss = dis_model.train_on_batch(x=interleaved, y=interleaved_scores)
+            print("Discriminator loss:", dis_loss)
 
             with g_train.as_default():
                 _reset_tf_graph_random_seed()
 
-                summary.value.add(tag="discriminator_truth_loss", simple_value=dis_loss)
+                summary.value.add(tag="discriminator_loss", simple_value=dis_loss)
                 # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
 
-            print("Training discriminator with composed data")
-            composed_dis_loss = dis_model.train_on_batch(composed_disc_in, composed_disc_out)
-            print("Discriminator composed loss:", composed_dis_loss)
-
-            with g_train.as_default():
-                _reset_tf_graph_random_seed()
-
-                summary.value.add(tag="discriminator_composed_loss", simple_value=composed_dis_loss)
-                writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
-                writer.flush()
-                summary = tf.Summary()
+            # print("Training discriminator with composed data")
+            # composed_dis_loss = dis_model.train_on_batch(composed_disc_in, composed_disc_out)
+            # print("Discriminator composed loss:", composed_dis_loss)
+            #
+            # with g_train.as_default():
+            #     _reset_tf_graph_random_seed()
+            #
+            #     summary.value.add(tag="discriminator_composed_loss", simple_value=composed_dis_loss)
+            #     writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
+            #     writer.flush()
+            #     summary = tf.Summary()
             loss += (step_loss + dis_loss) / FLAGS.steps_per_checkpoint
         else:
             print("Skipping training of discriminator because current step is too small:", current_step)
