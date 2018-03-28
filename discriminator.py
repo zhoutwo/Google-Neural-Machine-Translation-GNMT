@@ -87,7 +87,7 @@ def get_disc_input(encoder_in, decoder_in):
     if not data_utils.EOS_ID in decoder_in:
         print("Warning: EOS_ID NOT in decoder input")
         if data_utils.PAD_ID in decoder_in:
-            part2 = decoder_in[:decoder_in.index(data_utils.PAD_ID+1)]
+            part2 = decoder_in[:decoder_in.index(data_utils.PAD_ID)+1]
             part2[-1] = data_utils.EOS_ID
         else:
             part2 = decoder_in[:] + [data_utils.EOS_ID]
