@@ -64,7 +64,7 @@ FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(40, 10), (60, 30), (100, 50), (140, 60), (180, 80), (220, 90), (260, 100)]
+_buckets = [(15, 10), (25, 20), (45, 30), (90, 40), (180, 50)]
 
 
 def read_data(source_path, target_path, max_size=None):
@@ -257,7 +257,7 @@ def train():
 
     print("Creating discriminator model")
     with tf.device("/cpu:0"):
-        dis_model = discriminator.create_model(max_encoder_seq_length=260,
+        dis_model = discriminator.create_model(max_encoder_seq_length=180,
                                                num_layers=FLAGS.num_layers,
                                                num_gpus=FLAGS.num_gpus,
                                                num_dict_size=FLAGS.en_vocab_size,
@@ -539,7 +539,7 @@ def decode():
             # Create model and load parameters.
             model = create_model(sess, True)
             model = create_or_load_model(sess, model)
-            dis_model = discriminator.create_model(max_encoder_seq_length=260,
+            dis_model = discriminator.create_model(max_encoder_seq_length=180,
                                                    num_layers=FLAGS.num_layers,
                                                    num_gpus=0,
                                                    num_dict_size=FLAGS.en_vocab_size,
