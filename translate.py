@@ -36,6 +36,7 @@ tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("seed", None, "Random seed to use.")
 tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
+tf.app.flags.DEFINE_integer("disc_size", 1024, "Size of each discriminator layer.")
 tf.app.flags.DEFINE_integer("num_layers", 4, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("num_gpus", 0, "Number of GPUs available.")
 tf.app.flags.DEFINE_integer("en_vocab_size", 40000, "English vocabulary size.")
@@ -261,7 +262,7 @@ def train():
                                                num_layers=FLAGS.num_layers,
                                                num_gpus=FLAGS.num_gpus,
                                                num_dict_size=FLAGS.en_vocab_size,
-                                               latent_dim=FLAGS.size,
+                                               latent_dim=FLAGS.disc_size,
                                                checkpoint_folder=FLAGS.train_dir)
     writer = None
     summary = None
@@ -528,7 +529,7 @@ def decode():
                                                    num_layers=FLAGS.num_layers,
                                                    num_gpus=0,
                                                    num_dict_size=FLAGS.en_vocab_size,
-                                                   latent_dim=FLAGS.size,
+                                                   latent_dim=FLAGS.disc_size,
                                                    checkpoint_folder=FLAGS.train_dir)
         model.batch_size = 1  # We decode one sentence at a time.
 
