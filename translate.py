@@ -215,7 +215,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
         )
         disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
         disc_out = disc_out[0]
-        print("Discriminator score:", disc_out)
+        print("Discriminator score:", disc_out[0])
         if disc_out[0] > threshold:
             break
         else:
