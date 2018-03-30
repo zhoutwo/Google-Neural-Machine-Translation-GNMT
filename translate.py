@@ -460,7 +460,7 @@ def train():
                     summary.value.add(tag="generator_composed_loss", simple_value=new_step_loss)
             else:
                 print("Not training generator with composed false data because last composed loss:", new_step_loss,
-                      "is smaller than last normal loss:", step_loss)
+                      "is too small compared to last normal loss:", step_loss)
 
         else:
             print("Skipping training of generator with composed data because current step is too small:", current_step)
