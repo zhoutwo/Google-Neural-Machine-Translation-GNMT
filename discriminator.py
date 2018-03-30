@@ -14,7 +14,7 @@ def _get_step_num(fn):
     num = fn[(len(fn) - fn[::-1].index('/')):-3]
     return int(num)
 
-def create_model(max_encoder_seq_length=200, num_layers=1, num_gpus=0, num_dict_size=40000, latent_dim=1024, checkpoint_folder=None):
+def create_model(num_layers=1, num_gpus=0, num_dict_size=40000, latent_dim=1024, checkpoint_folder=None):
     if checkpoint_folder:
         max = 0
         stored_models = glob.glob(checkpoint_folder + '/*.h5')
@@ -26,7 +26,7 @@ def create_model(max_encoder_seq_length=200, num_layers=1, num_gpus=0, num_dict_
             print("Reading discriminator model from saved model:", checkpoint_folder + str(max) + '.h5')
             return load_model(checkpoint_folder + str(max) + '.h5')
 
-    inputs = Input(shape=(max_encoder_seq_length,), name='discriminator_Input')
+    inputs = Input(shape=(None,), name='discriminator_Input')
     with tf.device('/cpu:0'):
         discriminator = Embedding(num_dict_size, latent_dim, name='discriminator_Embedding')(inputs)
 
@@ -94,8 +94,8 @@ def get_disc_input(encoder_in, decoder_in):
     else:
         part2 = decoder_in[:decoder_in.index(data_utils.EOS_ID)+1] # Include the EOS token
 
-    assert len(part1) + len(part2) <= 180
-    result = np.zeros(shape=(180,))
+    assert len(part1) + len(part2) <= 191
+    result = np.zeros(shape=(191,))
     result[:len(part1)] = part1[:]
     if data_utils.GO_ID in decoder_in:
         result[len(part1):len(part1) + len(part2)] = part2[:]

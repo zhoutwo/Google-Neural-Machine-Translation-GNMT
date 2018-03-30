@@ -168,7 +168,7 @@ def _convert_outputs(outputs, rev_vocab):
     return " ".join([tf.compat.as_str(rev_vocab[output]) for output in outputs])
 
 
-def _evaluate(sess, model, dis_model, sentence, en_vocab):
+def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
     import discriminator
     # Get token-ids for the input sentence.
     token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), en_vocab)
@@ -215,11 +215,13 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab):
         )
         disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
         disc_out = disc_out[0]
+        print("Discriminator score:", disc_out)
         if disc_out[0] > threshold:
             break
         else:
             bucket_id = len(_buckets) - 1
             new_enc_in = disc_in
+            print("Current output:", _convert_outputs(outputs, rev_fr_vocab))
 
             encoder_inputs, \
             decoder_inputs, \
@@ -258,8 +260,7 @@ def train():
 
     print("Creating discriminator model")
     with tf.device("/cpu:0"):
-        dis_model = discriminator.create_model(max_encoder_seq_length=180,
-                                               num_layers=FLAGS.num_layers,
+        dis_model = discriminator.create_model(num_layers=FLAGS.num_layers,
                                                num_gpus=FLAGS.num_gpus,
                                                num_dict_size=FLAGS.en_vocab_size,
                                                latent_dim=FLAGS.disc_size,
@@ -525,8 +526,7 @@ def decode():
             # Create model and load parameters.
             model = create_model(sess, True)
             model = create_or_load_model(sess, model)
-            dis_model = discriminator.create_model(max_encoder_seq_length=180,
-                                                   num_layers=FLAGS.num_layers,
+            dis_model = discriminator.create_model(num_layers=FLAGS.num_layers,
                                                    num_gpus=0,
                                                    num_dict_size=FLAGS.en_vocab_size,
                                                    latent_dim=FLAGS.disc_size,
@@ -548,7 +548,7 @@ def decode():
                         line = input_file.readline()
                         while line:
                             try:
-                                outputs = _evaluate(sess, model, dis_model, line, en_vocab)
+                                outputs = _evaluate(sess, model, dis_model, line, en_vocab, rev_fr_vocab)
                                 output_file.write(_convert_outputs(outputs, rev_fr_vocab) + "\n")
                                 actual_input_file.write(line)
                             except Exception as e:
@@ -562,7 +562,7 @@ def decode():
             sentence = sys.stdin.readline()
             while sentence:
                 try:
-                    outputs = _evaluate(sess, model, dis_model, sentence, en_vocab)
+                    outputs = _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab)
                     # Print out French sentence corresponding to outputs.
                     print(_convert_outputs(outputs, rev_fr_vocab))
                     print("> ", end="")
