@@ -430,10 +430,9 @@ def train():
             #     writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
             #     writer.flush()
             #     summary = tf.Summary()
-            loss += (step_loss + dis_loss) / FLAGS.steps_per_checkpoint
         else:
             print("Skipping training of discriminator because current step is too small:", current_step)
-            loss += step_loss / FLAGS.steps_per_checkpoint
+        loss += step_loss / FLAGS.steps_per_checkpoint
 
         if current_step >= FLAGS.steps_start_train_generator_composed:
             if not (FLAGS.composed_train_guard and new_step_loss * 1.5 < step_loss):
@@ -489,7 +488,7 @@ def train():
                 # writer.add_summary(summary, global_step=train_model.global_step.eval(session=train_sess))
 
             # Decrease learning rate if no improvement was seen over last 3 times.
-            if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+            if (current_step > FLAGS.steps_start_train_generator_composed + 5) and len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
                 train_sess.run(train_model.learning_rate_decay_op)
             previous_losses.append(loss)
             # Save checkpoint and zero timer and loss.
