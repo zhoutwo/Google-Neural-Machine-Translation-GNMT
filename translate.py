@@ -44,6 +44,8 @@ tf.app.flags.DEFINE_integer("fr_vocab_size", 40000, "French vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", "/tmp", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "/tmp", "Training directory.")
 tf.app.flags.DEFINE_string("log_dir", "/tmp", "TensorBoard log directory.")
+tf.app.flags.DEFINE_boolean("composed_train_guard", False,
+                            "Set to True to prevent composed training from running when the composed loss is smaller than 2/3 of normal loss.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 0,
                             "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
@@ -305,6 +307,7 @@ def train():
     current_step = 0
     previous_losses = []
     summary = tf.Summary()
+    step_loss, new_step_loss = 0, 0
     while True:
         # Choose a bucket according to data distribution. We pick a random number
         # in [0, 1] and use the corresponding interval in train_buckets_scale.
@@ -433,28 +436,31 @@ def train():
             loss += step_loss / FLAGS.steps_per_checkpoint
 
         if current_step >= FLAGS.steps_start_train_generator_composed:
-            print("Training generator with composed false data")
-            with g_train.as_default():
-                new_enc_in = composed_disc_in
-                new_dec_in = [
-                    _pad_decode_in(line[:line.index(data_utils.EOS_ID)], 100) if data_utils.EOS_ID in line else line
-                    for line in composed_decoder_out
-                ]
+            if not (FLAGS.composed_train_guard and new_step_loss * 1.5 < step_loss):
+                print("Training generator with composed false data")
+                with g_train.as_default():
+                    new_enc_in = composed_disc_in
+                    new_dec_in = [
+                        _pad_decode_in(line[:line.index(data_utils.EOS_ID)], 100) if data_utils.EOS_ID in line else line
+                        for line in composed_decoder_out
+                    ]
 
-                bucket_id_to_use = len(_buckets) - 1
+                    bucket_id_to_use = len(_buckets) - 1
 
-                new_encoder_inputs, \
-                new_decoder_inputs, \
-                new_target_weights, \
-                new_original_encoder_inputs, \
-                new_original_decoder_inputs = train_model.get_batch(
-                    {bucket_id_to_use: [(new_enc_in[i], new_dec_in[i]) for i in range(train_model.batch_size)]}, bucket_id_to_use
-                )
-                _, new_step_loss, _ = train_model.step(train_sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id_to_use,
-                                                   False)
-                print("Generator composed loss:", new_step_loss)
-                global_step = train_model.global_step.eval(session=train_sess)
-                summary.value.add(tag="generator_composed_loss", simple_value=new_step_loss)
+                    new_encoder_inputs, \
+                    new_decoder_inputs, \
+                    new_target_weights, \
+                    new_original_encoder_inputs, \
+                    new_original_decoder_inputs = train_model.get_batch(
+                        {bucket_id_to_use: [(new_enc_in[i], new_dec_in[i]) for i in range(train_model.batch_size)]}, bucket_id_to_use
+                    )
+                    _, new_step_loss, _ = train_model.step(train_sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id_to_use,
+                                                       False)
+                    print("Generator composed loss:", new_step_loss)
+                    summary.value.add(tag="generator_composed_loss", simple_value=new_step_loss)
+            else:
+                print("Not training generator with composed false data because last composed loss:", new_step_loss,
+                      "is smaller than last normal loss:", step_loss)
 
         else:
             print("Skipping training of generator with composed data because current step is too small:", current_step)
