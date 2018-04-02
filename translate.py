@@ -307,7 +307,8 @@ def train():
     current_step = 0
     previous_losses = []
     summary = tf.Summary()
-    step_loss, new_step_loss = 0, 0
+    step_loss, new_step_loss = 100, 100
+    composed_rest_counter = 0
     while True:
         # Choose a bucket according to data distribution. We pick a random number
         # in [0, 1] and use the corresponding interval in train_buckets_scale.
@@ -435,7 +436,12 @@ def train():
         loss += step_loss / FLAGS.steps_per_checkpoint
 
         if current_step >= FLAGS.steps_start_train_generator_composed:
-            if not (FLAGS.composed_train_guard and new_step_loss * 1.5 < step_loss):
+            if new_step_loss is -1:
+                if composed_rest_counter > 50:
+                    print("Timeout reached; resuming training of composed false data")
+                    new_step_loss = 100
+                    composed_rest_counter = 0
+            if not FLAGS.composed_train_guard or new_step_loss * 1.5 >= step_loss:
                 print("Training generator with composed false data")
                 with g_train.as_default():
                     new_enc_in = composed_disc_in
@@ -458,6 +464,8 @@ def train():
                     print("Generator composed loss:", new_step_loss)
                     summary.value.add(tag="generator_composed_loss", simple_value=new_step_loss)
             else:
+                composed_rest_counter += 1
+                new_step_loss = -1
                 print("Not training generator with composed false data because last composed loss:", new_step_loss,
                       "is too small compared to last normal loss:", step_loss)
 
