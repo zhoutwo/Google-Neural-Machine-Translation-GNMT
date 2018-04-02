@@ -57,21 +57,6 @@ def create_model(num_layers=1, num_gpus=0, num_dict_size=40000, latent_dim=1024,
     return model
 
 
-def get_discriminator_input(input, generated_output, eos_id, sos_id):
-    input_length = len(input)
-    input_eos_index = input.where(input == eos_id)[0]
-    output_eos_index = generated_output(generated_output == eos_id)[0]
-    rest_length = input_length - input_eos_index - 1
-    if output_eos_index < rest_length:
-        print('Warning: output length too large:', input, generated_output, input_eos_index, output_eos_index,
-              rest_length)
-
-    input_copy = input[:]
-    input_copy[input_eos_index + 1:] = generated_output[:rest_length]
-    input_copy[input_eos_index] = sos_id
-    return input_copy
-
-
 def get_disc_input(encoder_in, decoder_in):
     encoder_in = list(encoder_in)
     decoder_in = list(decoder_in)
@@ -95,7 +80,7 @@ def get_disc_input(encoder_in, decoder_in):
         part2 = decoder_in[:decoder_in.index(data_utils.EOS_ID)+1] # Include the EOS token
 
     assert len(part1) + len(part2) <= 180
-    result = np.zeros(shape=(180,))
+    result = np.ones(shape=(180,), dtype=np.int32) * -1
     result[:len(part1)] = part1[:]
     if data_utils.GO_ID in decoder_in:
         result[len(part1):len(part1) + len(part2)] = part2[:]
@@ -104,31 +89,8 @@ def get_disc_input(encoder_in, decoder_in):
         result[len(part1)] = data_utils.GO_ID
         result[len(part1) + 1:len(part1) + 1 + len(part2)] = part2[:]
         result[len(part1) + 1 + len(part2)] = data_utils.EOS_ID
+    result_ls = list(result)
+    result = result[:result_ls.index(-1)]
+    assert 0 not in result
     return result
 
-def step(step_input, eos_id, sos_id, tf_predicted_output, keras_dis_model, step_output=None):
-    """
-    Step the model
-    Args:
-      step_input:
-      eos_id:
-      tf_predicted_output:
-      keras_dis_model:
-      step_output:
-
-    Returns:
-      True if the given tf_predicted_output is good, False if it needs regenerated
-
-    """
-
-    train_input_false = get_discriminator_input(input=step_input, generated_output=tf_predicted_output, eos_id=eos_id,
-                                                sos_id=sos_id)
-    if step_output:
-        # We are training
-        train_input = get_discriminator_input(input=step_input, generated_output=step_output, eos_id=eos_id,
-                                              sos_id=sos_id)
-        loss1 = keras_dis_model.train_on_batch(np.array([train_input]), np.array([1]))
-        loss2 = keras_dis_model.train_on_batch(np.array([train_input_false]), np.array([0]))
-        print('Loss 1:', loss1, 'Loss 2:', loss2)
-
-    return keras_dis_model.predict(np.array([train_input_false])) >= 0.5
