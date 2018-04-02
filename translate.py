@@ -153,8 +153,11 @@ def _get_outputs(ls):
     return o
 
 def _pad_decode_in(di, s):
-    result = np.ones(shape=(s,)) * data_utils.PAD_ID
-    result[:len(di)] = di[:]
+    result = np.ones(shape=(s,), dtype=np.int32) * data_utils.PAD_ID
+    if len(di) < s:
+        result[:len(di)] = di[:]
+    else:
+        result[:] = di[:s]
     return result
 
 def _reset_tf_graph_random_seed():
@@ -233,6 +236,22 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
                 {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
             )
     return outputs
+
+
+def _get_len(s):
+    s = list(s)
+    if data_utils.PAD_ID in s:
+        return s.index(data_utils.PAD_ID)
+    else:
+        return len(s)
+
+
+def _get_rid_of_SOS(s):
+    if s[0] is data_utils.GO_ID:
+        return s[1:]
+    else:
+        return s
+
 
 def train():
     """Train a en->fr translation model using WMT data."""
@@ -389,27 +408,23 @@ def train():
              for i in range(len(composed_disc_in_enc))]
         )
         composed_decoder_out = np.array(composed_decoder_out)
+        actual_t = [(encoder_inputs_transposed_original_order[i], _get_rid_of_SOS(decoder_inputs_transposed[i]), (1, 0))
+             for i in range(train_model.batch_size)]
+        actual_f = [(composed_disc_in_enc[i], _get_rid_of_SOS(composed_decoder_out[i]), (0, 1))
+             for i in range(len(composed_disc_in_enc))]
+        actuals = actual_t + actual_f
+
+        maxs = max([_get_len(a[0]) for a in actuals])
+        maxt = max([_get_len(a[1]) for a in actuals])
+        actual_padded = [(_pad_decode_in(a[0], maxs), _pad_decode_in(a[1], maxt), a[2]) for a in actuals]
+        np.random.shuffle(actual_padded)
+        interleaved = [
+            np.array([a[0] for a in actual_padded], dtype=np.int32),
+            np.array([a[1] for a in actual_padded], dtype=np.int32)
+        ]
+        interleaved_scores = np.array([a[2] for a in actual_padded], dtype=np.float32)
         # composed_disc_out = np.ones((len(composed_disc_in_enc), 2))
         # composed_disc_out[:, 0] = 0
-
-        if len(composed_disc_in_enc) < train_model.batch_size:
-            interleaved = np.zeros((train_model.batch_size + composed_disc_in_enc, len(disc_in[0])), dtype=int)
-            interleaved_scores = np.zeros((train_model.batch_size + composed_disc_in_enc, 2))
-            for i in range(len(composed_disc_in_enc)):
-                interleaved[2 * i, :] = disc_in[i, :]
-                interleaved_scores[2 * i, 0] = 1
-                interleaved[2 * i + 1, :] = composed_disc_in[i, :]
-                interleaved_scores[2 * i + 1, 1] = 1
-            interleaved[2 * len(composed_disc_in_enc):, :] = disc_in[len(composed_disc_in_enc), :]
-            interleaved_scores[2 * len(composed_disc_in_enc):, 0] = 1
-        else:
-            interleaved = np.zeros((train_model.batch_size * 2, len(disc_in[0])), dtype=int)
-            interleaved_scores = np.zeros((train_model.batch_size * 2, 2))
-            for i in range(train_model.batch_size):
-                interleaved[2 * i, :] = disc_in[i, :]
-                interleaved_scores[2 * i, 0] = 1
-                interleaved[2 * i + 1, :] = composed_disc_in[i, :]
-                interleaved_scores[2 * i + 1, 1] = 1
 
         if current_step >= FLAGS.steps_start_train_discriminator:
             print("Training discriminator")
