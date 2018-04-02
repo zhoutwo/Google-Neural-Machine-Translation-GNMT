@@ -26,31 +26,41 @@ def create_model(num_layers=1, num_gpus=0, num_dict_size=40000, latent_dim=1024,
             print("Reading discriminator model from saved model:", checkpoint_folder + str(max) + '.h5')
             return load_model(checkpoint_folder + str(max) + '.h5')
 
-    inputs = Input(shape=(None,), name='discriminator_Input')
+    inputs = Input(shape=(None,))
     with tf.device('/cpu:0'):
-        discriminator = Embedding(num_dict_size, latent_dim, name='discriminator_Embedding')(inputs)
+        discriminator = Embedding(num_dict_size, latent_dim, name='discriminator_embedding')(inputs)
 
     if not num_gpus:
         with tf.device('/cpu:0'):
             for i in range(num_layers - 1):
-                discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(i), return_sequences=True)(discriminator)
-            discriminator, d_h, d_c = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1), return_state=True)(discriminator)
+                discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(i), return_sequences=True)(
+                    discriminator)
+            discriminator, d_h, d_c = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1),
+                                           return_state=True)(discriminator)
     else:
         for i in range(num_layers - 1):
             with tf.device('/device:GPU:' + str(i % num_gpus)):
-                discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(i), return_sequences=True)(discriminator)
+                discriminator = LSTM(latent_dim, name='discriminator_LSTM' + str(i), return_sequences=True)(
+                    discriminator)
         with tf.device('/device:GPU:' + str(num_layers % num_gpus)):
-            discriminator, d_h, d_c = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1), return_state=True)(discriminator)
-    output = Concatenate(name='discriminator_Concat')([d_h, d_c])
-    output = Dense(int(latent_dim), activation='relu', name='discriminator_FC1')(output)
-    output = Dropout(0.2)(output)
-    output = Dense(int(latent_dim / 2), activation='relu', name='discriminator_FC2')(output)
-    output = Dropout(0.2)(output)
-    output = Dense(int(latent_dim / 8), activation='relu', name='discriminator_FC3')(output)
-    output = Dropout(0.2)(output)
-    output = Dense(2, activation='softmax', name='discriminator_Classification')(output)
+            discriminator, d_h, d_c = LSTM(latent_dim, name='discriminator_LSTM' + str(num_layers - 1),
+                                           return_state=True)(discriminator)
+    output = Concatenate()([d_h, d_c])
+    read_model = Model(inputs, output)
+    source_inputs = Input(shape=(None,))
+    target_inputs = Input(shape=(None,))
+    source_output = read_model(source_inputs)
+    target_output = read_model(target_inputs)
+    fc_input = Concatenate()([source_output, target_output])
+    fc_output = Dense(int(latent_dim), activation='relu')(fc_input)
+    fc_output = Dropout(0.2)(fc_output)
+    fc_output = Dense(int(latent_dim / 2), activation='relu')(fc_output)
+    fc_output = Dropout(0.2)(fc_output)
+    fc_output = Dense(int(latent_dim / 8), activation='relu')(fc_output)
+    fc_output = Dropout(0.2)(fc_output)
+    fc_output = Dense(2, activation='softmax', name='discriminator_Classification')(fc_output)
 
-    model = Model(inputs=inputs, outputs=output)
+    model = Model(inputs=[source_inputs, target_inputs], outputs=fc_output)
     model.compile(optimizer='adam', loss='binary_crossentropy')
     model.summary()
 
