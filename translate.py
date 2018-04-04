@@ -214,10 +214,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
         #     for i in range(model.batch_size)
         # ]
         output_token_ids = outputs
-        disc_in = np.array(
-            [discriminator.get_disc_input(encoder_inputs_transposed_original_order[0],
-                                          output_token_ids)]
-        )
+        disc_in = [np.array([encoder_inputs_transposed_original_order[0]], dtype=np.int32), np.array([_get_rid_of_SOS(output_token_ids)], dtype=np.int32)]
         disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
         disc_out = disc_out[0]
         print("Discriminator score:", disc_out[0])
