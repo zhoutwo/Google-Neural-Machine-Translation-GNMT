@@ -173,7 +173,7 @@ def _convert_outputs(outputs, rev_vocab):
     return " ".join([tf.compat.as_str(rev_vocab[output]) for output in outputs])
 
 
-def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
+def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_all=False):
     import discriminator
     # Get token-ids for the input sentence.
     token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), en_vocab)
@@ -188,6 +188,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
     original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
     max_retries = 10
     threshold = 0.5
+    actual_outputs = ""
     for i in range(max_retries):
         # Get output logits for the sentence.
         _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
@@ -224,11 +225,17 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
         disc_out = disc_out[0]
         print("Discriminator score:", disc_out[0])
         if disc_out[0] > threshold:
+            if not retain_all:
+                actual_outputs = outputs
+            else:
+                actual_outputs += str(disc_out[0]) + "\t" + _convert_outputs(outputs, rev_fr_vocab)
             break
         else:
             bucket_id = len(_buckets) - 1
             new_enc_in = composed_in
             print("Current output:", _convert_outputs(outputs, rev_fr_vocab))
+            if retain_all:
+                actual_outputs += str(disc_out[0]) + "\t" + _convert_outputs(outputs, rev_fr_vocab) + "\t"
 
             encoder_inputs, \
             decoder_inputs, \
@@ -237,7 +244,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
             new_original_decoder_inputs = model.get_batch(
                 {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
             )
-    return outputs
+    return actual_outputs
 
 
 def _get_len(s):
@@ -578,8 +585,8 @@ def decode():
                         line = input_file.readline()
                         while line:
                             try:
-                                outputs = _evaluate(sess, model, dis_model, line, en_vocab, rev_fr_vocab)
-                                output_file.write(_convert_outputs(outputs, rev_fr_vocab) + "\n")
+                                outputs = _evaluate(sess, model, dis_model, line, en_vocab, rev_fr_vocab, True)
+                                output_file.write(outputs + "\n")
                                 actual_input_file.write(line)
                             except Exception as e:
                                 print("Error occurred while decoding", line, ", and the error was:", str(e))
@@ -594,11 +601,11 @@ def decode():
                 try:
                     outputs = _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab)
                     # Print out French sentence corresponding to outputs.
-                    print(_convert_outputs(outputs, rev_fr_vocab))
-                    print("> ", end="")
-                    sys.stdout.flush()
+                    print(outputs, rev_fr_vocab)
                 except Exception as e:
                     print("Error occurred while decoding", sentence, ", and the error is:", str(e))
+                print("> ", end="")
+                sys.stdout.flush()
                 sentence = sys.stdin.readline()
 
 
