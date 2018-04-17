@@ -264,7 +264,7 @@ def train():
 
 
 def decode():
-    with tf.Session() as sess:
+    with tf.Session(graph=tf.Graph()) as sess:
         # Create model and load parameters.
         model = create_model(sess, True)
         model.batch_size = 1  # We decode one sentence at a time.
