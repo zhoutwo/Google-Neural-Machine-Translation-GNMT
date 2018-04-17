@@ -104,7 +104,10 @@ def get_disc_input(encoder_in, decoder_in):
     else:
         part2 = decoder_in[:decoder_in.index(data_utils.EOS_ID)+1] # Include the EOS token
 
-    assert len(part1) + len(part2) <= 180
+    # assert len(part1) + len(part2) <= 180
+    if len(part1) + len(part2) > 180:
+        print("Warning: total length greater than limit:", len(part1) + len(part2))
+        part2 = part2[:180-len(part1)]
     result = np.zeros(shape=(180,))
     result[:len(part1)] = part1[:]
     if data_utils.GO_ID in decoder_in:
