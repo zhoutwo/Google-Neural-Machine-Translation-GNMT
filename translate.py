@@ -267,6 +267,7 @@ def decode():
     with tf.Session() as sess:
         # Create model and load parameters.
         model = create_model(sess, True)
+        model = create_or_load_model(sess, model, False)
         model.batch_size = 1  # We decode one sentence at a time.
 
         # Load vocabularies.
