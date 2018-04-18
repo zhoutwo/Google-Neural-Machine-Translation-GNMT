@@ -90,7 +90,10 @@ def get_disc_input(encoder_in, decoder_in):
         result[len(part1) + 1:len(part1) + 1 + len(part2)] = part2[:]
         result[len(part1) + 1 + len(part2)] = data_utils.EOS_ID
     result_ls = list(result)
-    result = result[:result_ls.index(-1)]
+    if -1 in result_ls:
+        result = result[:result_ls.index(-1)]
+    else:
+        result = result[:]
     assert 0 not in result
     return result
 
