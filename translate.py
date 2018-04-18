@@ -224,7 +224,6 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
         # ]
         output_token_ids = outputs
         disc_in = [np.array([encoder_inputs_transposed_original_order[0]], dtype=np.int32), np.array([_get_rid_of_SOS(output_token_ids)], dtype=np.int32)]
-        print("DISC IN:", disc_in)
         composed_in = np.array(
             [discriminator.get_disc_input(encoder1_inputs_transposed_original_order[0],
                                           output_token_ids)],
