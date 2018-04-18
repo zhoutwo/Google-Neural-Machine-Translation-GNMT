@@ -117,7 +117,10 @@ def get_disc_input(encoder_in, decoder_in):
         result[len(part1)] = data_utils.GO_ID
         print(len(part1), len(part2), len(result[len(part1) + 1:len(part1) + 1 + len(part2)]))
         result[len(part1) + 1:len(part1) + 1 + len(part2)] = part2[:]
-        result[len(part1) + 1 + len(part2)] = data_utils.EOS_ID
+        if len(part1) + 1 + len(part2) < 180:
+            result[len(part1) + 1 + len(part2)] = data_utils.EOS_ID
+        else:
+            result[-1] = data_utils.EOS_ID
     return result
 
 def step(step_input, eos_id, sos_id, tf_predicted_output, keras_dis_model, step_output=None):
