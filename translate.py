@@ -216,11 +216,11 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
         # ]
         output_token_ids = outputs
         disc_in = [np.array([encoder_inputs_transposed_original_order[0]], dtype=np.int32), np.array([_get_rid_of_SOS(output_token_ids)], dtype=np.int32)]
-        composed_in = np.array(
+        composed_in = [np.array(
             [discriminator.get_disc_input(encoder_inputs_transposed_original_order[0],
                                           output_token_ids)],
             dtype=np.int32
-        )
+        )]
         if i is 0:
             disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
         else:
