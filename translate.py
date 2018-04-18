@@ -244,9 +244,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
             decoder_inputs, \
             target_weights, \
             new_original_encoder_inputs, \
-            new_original_decoder_inputs = model.get_batch(
-                {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
-            )
+            new_original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
     return actual_outputs
 
 
