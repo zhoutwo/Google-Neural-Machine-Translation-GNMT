@@ -60,7 +60,7 @@ FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(15, 10), (25, 20), (45, 30), (90, 40), (180, 50)]
+_buckets = [(15, 10), (25, 20), (45, 30), (90, 40), (180, 50), (3000, 100)]
 
 
 def read_data(source_path, target_path, max_size=None):
@@ -68,7 +68,7 @@ def read_data(source_path, target_path, max_size=None):
 
     Args:
       source_path: path to the files with token-ids for the source language.
-      target_path: path to the file with token-ids for the target language;
+      target_path: path to the file( with token-ids for the target language;
         it must be aligned with the source file: n-th line contains the desired
         output for n-th line from the source_path.
       max_size: maximum number of lines to read, all other will be ignored;
