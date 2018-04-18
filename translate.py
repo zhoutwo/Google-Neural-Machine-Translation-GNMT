@@ -226,7 +226,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
             break
         else:
             bucket_id = len(_buckets) - 1
-            new_enc_in = disc_in
+            # new_enc_in = disc_in
             print("Current output:", _convert_outputs(outputs, rev_fr_vocab))
 
             encoder_inputs, \
