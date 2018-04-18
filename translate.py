@@ -191,6 +191,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
     actual_outputs = ""
     for i in range(max_retries):
         # Get output logits for the sentence.
+        print("ENCODER INPUTS:", encoder_inputs)
         _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
                                          target_weights, bucket_id, True)
         # This is a greedy decoder - outputs are just argmaxes of output_logits.
@@ -216,6 +217,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
         # ]
         output_token_ids = outputs
         disc_in = [np.array([encoder_inputs_transposed_original_order[0]], dtype=np.int32), np.array([_get_rid_of_SOS(output_token_ids)], dtype=np.int32)]
+        print("DISC IN:", disc_in)
         composed_in = [np.array(
             [discriminator.get_disc_input(encoder_inputs_transposed_original_order[0],
                                           output_token_ids)],
