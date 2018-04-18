@@ -590,8 +590,7 @@ def decode():
                                 actual_input_file.write(line)
                             except Exception as e:
                                 print("Error occurred while decoding", line, ", and the error was:", str(e))
-                                if not str(e):
-                                    raise e
+                                raise e
                             line = input_file.readline()
 
         else:
@@ -606,8 +605,7 @@ def decode():
                     print(outputs, rev_fr_vocab)
                 except Exception as e:
                     print("Error occurred while decoding", sentence, ", and the error is:", str(e))
-                    if not str(e):
-                        raise e
+                    raise e
                 print("> ", end="")
                 sys.stdout.flush()
                 sentence = sys.stdin.readline()
