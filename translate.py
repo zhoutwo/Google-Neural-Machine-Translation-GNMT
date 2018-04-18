@@ -232,7 +232,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
             break
         else:
             bucket_id = len(_buckets) - 1
-            # new_enc_in = composed_in
+            new_enc_in = token_ids
             print("Current output:", _convert_outputs(outputs, rev_fr_vocab))
             if retain_all:
                 actual_outputs += str(disc_out[0]) + "\t" + _convert_outputs(outputs, rev_fr_vocab) + "\t"
