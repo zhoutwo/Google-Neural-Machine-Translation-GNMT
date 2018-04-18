@@ -187,8 +187,16 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
     target_weights, \
     original_encoder_inputs, \
     original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
+    encoder_inputs1 = encoder_inputs
     max_retries = 10
     threshold = 0.5
+    encoder1_inputs_transposed = [
+        [row[i] for row in encoder_inputs1]
+        for i in range(model.batch_size)
+    ]
+    encoder1_inputs_transposed_original_order = [
+        list(reversed(r)) for r in encoder1_inputs_transposed
+    ]
     for i in range(max_retries):
         # Get output logits for the sentence.
         _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
@@ -219,6 +227,11 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
             [discriminator.get_disc_input(encoder_inputs_transposed_original_order[0],
                                           output_token_ids)]
         )
+        composed_in = np.array(
+            [discriminator.get_disc_input(encoder1_inputs_transposed_original_order[0],
+                                          output_token_ids)],
+            dtype=np.int32
+        )
         disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
         disc_out = disc_out[0]
         print("Discriminator score:", disc_out[0])
@@ -226,7 +239,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab):
             break
         else:
             bucket_id = len(_buckets) - 1
-            new_enc_in = token_ids
+            new_enc_in = composed_in
             print("Current output:", _convert_outputs(outputs, rev_fr_vocab))
 
             encoder_inputs, \
