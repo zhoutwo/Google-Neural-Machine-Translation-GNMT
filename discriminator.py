@@ -115,6 +115,7 @@ def get_disc_input(encoder_in, decoder_in):
     else:
         print("Warning: GO_ID NOT in decoder input")
         result[len(part1)] = data_utils.GO_ID
+        print(len(part1), len(part2), len(result[len(part1) + 1:len(part1) + 1 + len(part2)]))
         result[len(part1) + 1:len(part1) + 1 + len(part2)] = part2[:]
         result[len(part1) + 1 + len(part2)] = data_utils.EOS_ID
     return result
