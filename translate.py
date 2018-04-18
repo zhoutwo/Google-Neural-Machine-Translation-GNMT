@@ -186,12 +186,19 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
     target_weights, \
     original_encoder_inputs, \
     original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
+    encoder_inputs1 = encoder_inputs
     max_retries = 10
     threshold = 0.5
     actual_outputs = ""
+    encoder1_inputs_transposed = [
+        [row[i] for row in encoder_inputs1]
+        for i in range(model.batch_size)
+    ]
+    encoder1_inputs_transposed_original_order = [
+        list(reversed(r)) for r in encoder1_inputs_transposed
+    ]
     for i in range(max_retries):
         # Get output logits for the sentence.
-        print("ENCODER INPUTS:", encoder_inputs)
         _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
                                          target_weights, bucket_id, True)
         # This is a greedy decoder - outputs are just argmaxes of output_logits.
@@ -218,11 +225,11 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
         output_token_ids = outputs
         disc_in = [np.array([encoder_inputs_transposed_original_order[0]], dtype=np.int32), np.array([_get_rid_of_SOS(output_token_ids)], dtype=np.int32)]
         print("DISC IN:", disc_in)
-        composed_in = [np.array(
-            [discriminator.get_disc_input(encoder_inputs_transposed_original_order[0],
+        composed_in = np.array(
+            [discriminator.get_disc_input(encoder1_inputs_transposed_original_order[0],
                                           output_token_ids)],
             dtype=np.int32
-        )]
+        )
         disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
         disc_out = disc_out[0]
         print("Discriminator score:", disc_out[0])
@@ -234,7 +241,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
             break
         else:
             bucket_id = len(_buckets) - 1
-            new_enc_in = token_ids
+            new_enc_in = composed_in
             print("Current output:", _convert_outputs(outputs, rev_fr_vocab))
             if retain_all:
                 actual_outputs += str(disc_out[0]) + "\t" + _convert_outputs(outputs, rev_fr_vocab) + "\t"
@@ -243,7 +250,9 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
             decoder_inputs, \
             target_weights, \
             new_original_encoder_inputs, \
-            new_original_decoder_inputs = model.get_batch({bucket_id: [(token_ids, [])]}, bucket_id)
+            new_original_decoder_inputs = model.get_batch(
+                {bucket_id: [(e, []) for e in new_enc_in]}, bucket_id
+            )
     return actual_outputs
 
 
