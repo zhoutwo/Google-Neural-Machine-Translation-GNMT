@@ -221,10 +221,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
                                           output_token_ids)],
             dtype=np.int32
         )]
-        if i is 0:
-            disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
-        else:
-            disc_out = dis_model.predict(x=composed_in, batch_size=model.batch_size)
+        disc_out = dis_model.predict(x=disc_in, batch_size=model.batch_size)
         disc_out = disc_out[0]
         print("Discriminator score:", disc_out[0])
         if disc_out[0] > threshold:
