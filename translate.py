@@ -67,7 +67,7 @@ FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(82, 26)]
+_buckets = [(15, 10), (25, 20), (45, 30), (90, 40), (180, 50)]
 
 
 def read_data(source_path, target_path, max_size=None):
@@ -596,6 +596,7 @@ def decode():
                                 actual_input_file.write(line)
                             except Exception as e:
                                 print("Error occurred while decoding", line, ", and the error was:", str(e))
+                                raise e
                             line = input_file.readline()
 
         else:
@@ -608,10 +609,11 @@ def decode():
                     outputs = _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab)
                     # Print out French sentence corresponding to outputs.
                     print(_convert_outputs(outputs, rev_fr_vocab))
-                    print("> ", end="")
-                    sys.stdout.flush()
                 except Exception as e:
                     print("Error occurred while decoding", sentence, ", and the error is:", str(e))
+                    raise e
+                print("> ", end="")
+                sys.stdout.flush()
                 sentence = sys.stdin.readline()
 
 
