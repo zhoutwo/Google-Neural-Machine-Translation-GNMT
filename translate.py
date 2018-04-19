@@ -178,6 +178,7 @@ def _evaluate(sess, model, dis_model, sentence, en_vocab, rev_fr_vocab, retain_a
     # Get token-ids for the input sentence.
     token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), en_vocab)
     # Which bucket does it belong to?
+    print("Token length:", len(token_ids))
     bucket_id = min([b for b in range(len(_buckets))
                      if _buckets[b][0] > len(token_ids)])
     # Get a 1-element batch to feed the sentence to the model.
