@@ -125,6 +125,7 @@ def create_or_load_model(session, model, initial_save=False):
     if ckpt:
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
         model.saver.restore(session, ckpt.model_checkpoint_path)
+        print("Loaded model")
     else:
         print("Created model with fresh parameters.")
         session.run(tf.global_variables_initializer())
