@@ -269,7 +269,6 @@ def decode():
         # Create model and load parameters.
         model = create_model(sess, True)
         model = create_or_load_model(sess, model, False)
-        model.batch_size = 1  # We decode one sentence at a time.
 
         # Load vocabularies.
         en_vocab_path = os.path.join(FLAGS.data_dir,
@@ -295,14 +294,14 @@ def decode():
                                 encoder_inputs, decoder_inputs, target_weights = model.get_batch(
                                     {bucket_id: [(token_ids, [])]}, bucket_id)
                                 # Get output logits for the sentence.
-                                _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                _, _, output_logits_arr = model.step(sess, encoder_inputs, decoder_inputs,
                                                                  target_weights, bucket_id, True)
                                 # This is a greedy decoder - outputs are just argmaxes of output_logits.
-                                outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+                                outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits for output_logits in output_logits_arr]
                                 # If there is an EOS symbol in outputs, cut them at that point.
-                                if data_utils.EOS_ID in outputs:
-                                    outputs = outputs[:outputs.index(data_utils.EOS_ID)]
-                                output_file.write((" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs])) + "\n")
+                                outputs = [output[:output.index(data_utils.EOS_ID)] if data_utils.EOS_ID in output else output for output in outputs]
+                                for output_sentence in outputs:
+                                    output_file.write((" ".join([tf.compat.as_str(rev_fr_vocab[output_word]) for output_word in output_sentence])) + "\n")
                                 actual_input_file.write(line)
                             except Exception as e:
                                 print("Error occurred while decoding", line, ", and the error was:", str(e))
@@ -310,6 +309,7 @@ def decode():
                             line = input_file.readline()
 
         else:
+            model.batch_size = 1  # We decode one sentence at a time.
             # Decode from standard input.
             sys.stdout.write("> ")
             sys.stdout.flush()
