@@ -299,8 +299,8 @@ def decode():
             print("Reshaping model inputs")
             batch_encoder_inputs, batch_decoder_inputs, batch_target_weights = [], [], []
             for i in range(len(inputs)):
-                if i + 64 < len(inputs):
-                    next_size = 64
+                if i + FLAGS.batch_size < len(inputs):
+                    next_size = FLAGS.batch_size
                 else:
                     next_size = len(inputs) - i
 
@@ -328,6 +328,7 @@ def decode():
                 for i in range(len(batch_encoder_inputs)):
                     encoder_inputs, decoder_inputs, target_weights = batch_encoder_inputs[i], batch_decoder_inputs[i], batch_target_weights[i]
                     try:
+                        assert model.batch_size == FLAGS.batch_size
                         _, _, output_logits_arr = model.step(sess, encoder_inputs, decoder_inputs,
                                                          target_weights, max_bucket_id, True)
                         # This is a greedy decoder - outputs are just argmaxes of output_logits.
