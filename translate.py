@@ -331,7 +331,7 @@ def decode():
                         for output_sentence in outputs:
                             output_file.write((" ".join([tf.compat.as_str(rev_fr_vocab[output_word]) for output_word in output_sentence])) + "\n")
                     except Exception as e:
-                        print("Error occurred while decoding", [" ".join([tf.compat.as_str(rev_fr_vocab[output_word] for output_word in encoder_input) for encoder_input in encoder_inputs], ", and the error was:", str(e))
+                        print("Error occurred while decoding", [" ".join([tf.compat.as_str(rev_fr_vocab[output_word]) for output_word in encoder_input]) for encoder_input in encoder_inputs], ", and the error was:", str(e))
                         raise e
 
         else:
