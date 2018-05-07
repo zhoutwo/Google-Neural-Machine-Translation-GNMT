@@ -304,6 +304,7 @@ def decode():
                     next_size = 64
                 else:
                     next_size = len(inputs) - i
+                i += 1
                 next_batch_encoder_inputs = input_encoder_inputs[i:i+next_size]
                 next_batch_decoder_inputs = input_decoder_inputs[i:i+next_size]
                 next_batch_target_weights = input_target_weights[i:i+next_size]
