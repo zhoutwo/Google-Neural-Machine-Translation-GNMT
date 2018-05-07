@@ -331,13 +331,9 @@ def decode():
                         assert model.batch_size == FLAGS.batch_size
                         _, _, output_logits_arr = model.step(sess, encoder_inputs, decoder_inputs,
                                                          target_weights, max_bucket_id, True)
+                        output_logits_reshaped = [[d[l] for d in output_logits_arr] for l in range(encoder_inputs.shape[1])]
                         # This is a greedy decoder - outputs are just argmaxes of output_logits.
-                        print(output_logits_arr)
-                        print(len(output_logits_arr))
-                        print(output_logits_arr[0])
-                        print(len(output_logits_arr[0]))
-                        print(output_logits_arr[0].shape)
-                        outputs = [[int(np.argmax(logit, axis=1)) for logit in output_logits] for output_logits in output_logits_arr]
+                        outputs = [np.argmax(logit, axis=1) for logit in output_logits_reshaped]
                         # If there is an EOS symbol in outputs, cut them at that point.
                         outputs = [output[:output.index(data_utils.EOS_ID)] if data_utils.EOS_ID in output else output for output in outputs]
                         for output_sentence in outputs:
