@@ -293,6 +293,8 @@ def decode():
                 input_encoder_inputs.append([a[0] for a in encoder_inputs])
                 input_decoder_inputs.append([a[0] for a in decoder_inputs])
                 input_target_weights.append([a[0] for a in target_weights])
+                if i % 10000 == 0:
+                    print(i, len(inputs))
 
             print("Reshaping model inputs")
             batch_encoder_inputs, batch_decoder_inputs, batch_target_weights = [], [], []
@@ -317,6 +319,9 @@ def decode():
                 batch_encoder_inputs.append(reshaped_next_batch_encoder_inputs)
                 batch_decoder_inputs.append(reshaped_next_batch_decoder_inputs)
                 batch_target_weights.append(reshaped_next_batch_target_weights)
+
+                if i % 10000 == 0:
+                    print(i, len(inputs))
 
             print("Decoding")
             with open(FLAGS.decode_output, "w") as output_file:
