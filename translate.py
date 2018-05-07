@@ -267,10 +267,12 @@ def train():
 def decode():
     with tf.Session() as sess:
         # Create model and load parameters.
+        print("Create model and load parameters")
         model = create_model(sess, True)
         model = create_or_load_model(sess, model, False)
 
         # Load vocabularies.
+        print("Load vocabularies")
         en_vocab_path = os.path.join(FLAGS.data_dir,
                                      "vocab%d.en" % FLAGS.en_vocab_size)
         fr_vocab_path = os.path.join(FLAGS.data_dir,
@@ -279,10 +281,12 @@ def decode():
         _, rev_fr_vocab = data_utils.initialize_vocabulary(fr_vocab_path)
 
         if FLAGS.decode_input:
+            print("Reading input file")
             inputs = [line.strip() for line in open(FLAGS.decode_input, "r")]
             input_token_ids = [data_utils.sentence_to_token_ids(tf.compat.as_bytes(line), en_vocab) for line in inputs]
             input_bucket_ids = [min([b for b in range(len(_buckets)) if _buckets[b][0] >= len(token_ids)]) for token_ids in input_token_ids]
             max_bucket_id = max(input_bucket_ids)
+            print("Generating model inputs")
             input_encoder_inputs, input_decoder_inputs, input_target_weights = [], [], []
             for i in range(len(inputs)):
                 encoder_inputs, decoder_inputs, target_weights = model.get_batch({max_bucket_id: [(input_token_ids[i], [])]}, max_bucket_id)
@@ -290,6 +294,7 @@ def decode():
                 input_decoder_inputs.append([a[0] for a in decoder_inputs])
                 input_target_weights.append([a[0] for a in target_weights])
 
+            print("Reshaping model inputs")
             batch_encoder_inputs, batch_decoder_inputs, batch_target_weights = [], [], []
             i = 0
             while i < len(inputs):
@@ -313,6 +318,7 @@ def decode():
                 batch_decoder_inputs.append(reshaped_next_batch_decoder_inputs)
                 batch_target_weights.append(reshaped_next_batch_target_weights)
 
+            print("Decoding")
             with open(FLAGS.decode_output, "w") as output_file:
                 for i in range(len(batch_encoder_inputs)):
                     encoder_inputs, decoder_inputs, target_weights = batch_encoder_inputs[i], batch_decoder_inputs[i], batch_target_weights[i]
