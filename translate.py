@@ -298,7 +298,8 @@ def decode():
 
             print("Reshaping model inputs")
             batch_encoder_inputs, batch_decoder_inputs, batch_target_weights = [], [], []
-            for i in range(len(inputs)):
+            i = 0
+            while i < len(inputs):
                 if i + FLAGS.batch_size < len(inputs):
                     next_size = FLAGS.batch_size
                 else:
@@ -322,6 +323,7 @@ def decode():
 
                 if i % 10000 == 0:
                     print(i, len(inputs))
+                i += next_size
 
             print("Decoding")
             with open(FLAGS.decode_output, "w") as output_file:
