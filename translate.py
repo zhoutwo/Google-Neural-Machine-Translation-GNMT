@@ -55,6 +55,8 @@ tf.app.flags.DEFINE_boolean("self_test", False,
                             "Run a self-test if this is set to True.")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
                             "Train using fp16 instead of fp32.")
+tf.app.flags.DEFINE_integer("max_train_step", 0,
+                            "How many steps to train (0 for unlimited).")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -209,7 +211,7 @@ def train():
         previous_losses = []
         summary = tf.Summary()
         writer = tf.summary.FileWriter(logdir=FLAGS.log_dir, graph=sess.graph)
-        while True:
+        while not FLAGS.max_train_step or current_step < FLAGS.max_train_step:
             # Choose a bucket according to data distribution. We pick a random number
             # in [0, 1] and use the corresponding interval in train_buckets_scale.
             random_number_01 = np.random.random_sample()
